@@ -1,0 +1,16 @@
+{
+  "name": "board-pack",
+  "description": "Quarterly board pack: scenarios, driver tornado, funding need and a written recommendation.",
+  "schedule": "0 7 1 1,4,7,10 *",
+  "defaults": { "scenario": { "extends": "base" } },
+  "output": "report",
+  "tasks": [
+    { "id": "compare", "uses": "model.compare", "with": { "names": ["base", "bull", "bear"] } },
+    { "id": "drivers", "uses": "agent.call", "with": { "agent": "forecaster", "skill": "drivers", "input": { "scenario": "${{ input.scenario }}" } } },
+    { "id": "runway", "uses": "agent.call", "with": { "agent": "treasurer", "skill": "runway", "input": { "scenario": "${{ input.scenario }}" } } },
+    { "id": "base", "uses": "model.run", "with": { "scenario": "${{ input.scenario }}" } },
+    { "id": "advice", "uses": "agent.ask", "needs": ["drivers", "runway"], "with": { "question": "How much should we raise and which levers matter most?", "scenario": "${{ input.scenario }}" } },
+    { "id": "report", "uses": "report.markdown", "needs": ["compare", "base", "advice"],
+      "with": { "title": "Board pack", "compare": "${{ tasks.compare.output }}", "policies": "${{ tasks.base.output.policies }}", "advice": "${{ tasks.advice.output }}" } }
+  ]
+}

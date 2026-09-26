@@ -1,0 +1,19 @@
+{
+  "name": "nightly-forecast",
+  "description": "Run all scenarios in parallel, gate on policy, stress-test, ask the master agent, publish a report and notify.",
+  "schedule": "0 6 * * *",
+  "concurrency": 4,
+  "defaults": { "scenario": { "extends": "base" }, "iterations": 300 },
+  "output": "report",
+  "tasks": [
+    { "id": "compare", "uses": "model.compare", "with": { "names": ["base", "bull", "bear", "efficiency"] } },
+    { "id": "base", "uses": "model.run", "with": { "scenario": "${{ input.scenario }}" } },
+    { "id": "stress", "uses": "model.monteCarlo", "with": { "scenario": "${{ input.scenario }}", "iterations": "${{ input.iterations }}" }, "retries": 1 },
+    { "id": "advice", "uses": "agent.ask", "with": { "question": "What should we prioritise given runway, risk and the key drivers?", "scenario": "${{ input.scenario }}" }, "continueOnError": true },
+    { "id": "report", "uses": "report.markdown", "needs": ["compare", "base", "stress", "advice"],
+      "with": { "title": "Nightly forecast", "compare": "${{ tasks.compare.output }}", "policies": "${{ tasks.base.output.policies }}", "monteCarlo": "${{ tasks.stress.output }}", "advice": "${{ tasks.advice.output }}" } },
+    { "id": "alert", "uses": "webhook.emit", "needs": ["base"], "if": { "ref": "tasks.base.output.policies.passed", "equals": false },
+      "with": { "event": "policy.violated", "data": "${{ tasks.base.output.policies }}" } },
+    { "id": "notify", "uses": "notify.slack", "needs": ["report"], "with": { "text": "${{ tasks.report.output.text }}" }, "continueOnError": true }
+  ]
+}
