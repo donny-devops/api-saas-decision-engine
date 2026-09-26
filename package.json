@@ -1,0 +1,22 @@
+{
+  "name": "api-saas-decision-engine",
+  "version": "0.1.0",
+  "description": "Driver-based financial model and decision engine for API-based SaaS: revenue, cost structure and scalability simulation with API, MCP server, agents, DAG pipelines and an interactive dashboard.",
+  "type": "module",
+  "license": "MIT",
+  "engines": { "node": ">=22.5" },
+  "bin": { "saas-model": "src/cli/index.js" },
+  "scripts": {
+    "start": "node src/api/server.js",
+    "dev": "node --watch src/api/server.js",
+    "test": "node --test \"test/**/*.test.js\"",
+    "model": "node src/cli/index.js run",
+    "mcp": "node src/mcp/server.js",
+    "migrate": "node src/db/migrate.js",
+    "seed": "node scripts/seed.js",
+    "pipeline": "node src/cli/index.js pipeline",
+    "digest": "node src/bots/digest.js",
+    "scan:secrets": "node scripts/scan-secrets.js",
+    "lint": "node scripts/lint.js"
+  }
+}
