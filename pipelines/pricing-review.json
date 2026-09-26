@@ -1,0 +1,11 @@
+{
+  "name": "pricing-review",
+  "description": "Chain: price impact → required price for a target ARR → policy check at that price.",
+  "defaults": { "scenario": { "extends": "base" }, "targetArr": 25000000 },
+  "output": "check",
+  "tasks": [
+    { "id": "impact", "uses": "agent.call", "with": { "agent": "pricing-strategist", "skill": "priceImpact", "input": { "scenario": "${{ input.scenario }}" } } },
+    { "id": "solve", "uses": "model.goalSeek", "with": { "scenario": "${{ input.scenario }}", "path": "tiers.*.price", "target": "endingArr", "goal": "${{ input.targetArr }}", "min": 0.3, "max": 4 } },
+    { "id": "check", "uses": "agent.call", "needs": ["impact", "solve"], "with": { "agent": "risk-analyst", "skill": "policies", "input": { "scenario": "${{ input.scenario }}" } } }
+  ]
+}

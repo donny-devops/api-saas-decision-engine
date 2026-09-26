@@ -64,13 +64,15 @@ export function goalSeek(scenario = {}, { path, target = 'endingArr', goal, min,
   if (!path || goal == null) throw Object.assign(new Error('goalSeek requires `path` and `goal`'), { status: 400 });
   const f = metricFn(target);
   const base = resolveAssumptions(scenario, lookup);
-  const current = getPath(base, path);
-  if (typeof current !== 'number') throw Object.assign(new Error(`Driver "${path}" is not numeric`), { status: 400 });
+  // Wildcard paths (tiers.*.price) seek a single multiplier applied to every match.
+  const multiplier = path.includes('*');
+  const current = multiplier ? 1 : getPath(base, path);
+  if (!multiplier && typeof current !== 'number') throw Object.assign(new Error(`Driver "${path}" is not numeric`), { status: 400 });
   let lo = min ?? current * 0.01;
   let hi = max ?? current * 10;
   const at = (v) => {
     const s = clone(base);
-    updatePath(s, path, () => v);
+    updatePath(s, path, (x) => (multiplier ? x * v : v));
     return f(runModel(s));
   };
   let fLo = at(lo) - goal;
@@ -85,7 +87,7 @@ export function goalSeek(scenario = {}, { path, target = 'endingArr', goal, min,
     if (Math.abs(fm) <= Math.abs(goal) * tolerance) break;
     if (Math.sign(fm) === Math.sign(fLo)) { lo = mid; fLo = fm; } else hi = mid;
   }
-  return { found: true, path, target, goal, currentValue: current, requiredValue: mid, change: current ? mid / current - 1 : null, achieved: at(mid) };
+  return { found: true, path, target, goal, mode: multiplier ? 'multiplier' : 'absolute', currentValue: current, requiredValue: mid, change: current ? mid / current - 1 : null, achieved: at(mid) };
 }
 
 export function monteCarlo(scenario = {}, { iterations = 500, seed = 42, drivers = KEY_DRIVERS, lookup } = {}) {
