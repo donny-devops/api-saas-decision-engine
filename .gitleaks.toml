@@ -1,0 +1,20 @@
+title = "api-saas-decision-engine gitleaks config"
+
+[extend]
+useDefault = true
+
+[[rules]]
+id = "sde-api-key"
+description = "Decision engine API key"
+regex = '''sde_(live|test)_[A-Za-z0-9_-]{24,}'''
+tags = ["key", "sde"]
+
+[[rules]]
+id = "sde-webhook-secret"
+description = "Webhook signing secret"
+regex = '''whsec_[A-Za-z0-9_-]{24,}'''
+tags = ["key", "webhook"]
+
+[allowlist]
+description = "Example config and test fixtures"
+paths = ['''\.env\.example$''', '''^test/''']

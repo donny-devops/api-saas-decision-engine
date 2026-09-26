@@ -1,0 +1,46 @@
+# Local stack: API + cron scheduler, secrets mounted as Docker secrets.
+#
+#   mkdir -p secrets
+#   node -e "console.log(require('crypto').randomBytes(32).toString('base64'))" > secrets/DATA_ENCRYPTION_KEY
+#   node -e "console.log('sde_live_'+require('crypto').randomBytes(24).toString('base64url'))" > secrets/ADMIN_API_KEY
+#   docker compose up --build
+services:
+  api:
+    build:
+      context: .
+      target: runtime
+    image: api-saas-decision-engine:local
+    ports:
+      - "8787:8787"
+    environment:
+      PUBLIC_URL: http://localhost:8787
+      SCHEDULER_ENABLED: "true"
+    volumes:
+      - engine-data:/data
+    secrets:
+      - DATA_ENCRYPTION_KEY
+      - ADMIN_API_KEY
+    read_only: true
+    tmpfs:
+      - /tmp
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    restart: unless-stopped
+
+  # MCP server over stdio: docker compose run --rm -T mcp
+  mcp:
+    image: api-saas-decision-engine:local
+    profiles: [mcp]
+    command: ["node", "src/mcp/server.js"]
+    stdin_open: true
+
+volumes:
+  engine-data:
+
+secrets:
+  DATA_ENCRYPTION_KEY:
+    file: ./secrets/DATA_ENCRYPTION_KEY
+  ADMIN_API_KEY:
+    file: ./secrets/ADMIN_API_KEY

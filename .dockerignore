@@ -1,0 +1,10 @@
+.git
+node_modules
+data
+exports
+secrets
+.env
+.env.*
+*.db
+*.db-*
+.claude
