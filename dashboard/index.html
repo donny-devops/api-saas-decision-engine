@@ -1,0 +1,546 @@
+<title>API SaaS Decision Engine</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans+Condensed:wght@500;600&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<style>
+  :root {
+    --bg: #eef1f4;
+    --panel: #fbfcfd;
+    --panel-2: #f4f6f8;
+    --line: #d8dee5;
+    --grid: #e6eaef;
+    --ink: #121a23;
+    --ink-2: #475464;
+    --ink-3: #6c7888;
+    --accent: #2a5fc4;
+    --accent-ink: #ffffff;
+    --s1: #2a78d6; --s2: #eb6834; --s3: #1baf7a;
+    --div-neg: #e34948; --div-pos: #2a78d6;
+    --band: rgba(42, 120, 214, 0.16);
+    --good: #1d7a4a; --good-bg: #e2f3ea;
+    --warn: #8a5a00; --warn-bg: #fbefd4;
+    --bad: #b3261e; --bad-bg: #fbe3e1;
+    --radius: 10px;
+    --sans: "IBM Plex Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+    --cond: "IBM Plex Sans Condensed", "IBM Plex Sans", system-ui, sans-serif;
+    --mono: "IBM Plex Mono", ui-monospace, "SFMono-Regular", Consolas, monospace;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      color-scheme: dark;
+      --bg: #0e141a; --panel: #151d25; --panel-2: #1b2530; --line: #2a3643; --grid: #222d38;
+      --ink: #e6ebf0; --ink-2: #aab5c2; --ink-3: #8593a2;
+      --accent: #6e93ee; --accent-ink: #0e141a;
+      --s1: #3987e5; --s2: #d95926; --s3: #199e70;
+      --div-neg: #e66767; --div-pos: #3987e5; --band: rgba(57, 135, 229, 0.22);
+      --good: #6fd19c; --good-bg: #173427; --warn: #f0c060; --warn-bg: #3a2e12; --bad: #ff8f86; --bad-bg: #3d1c1a;
+    }
+  }
+  :root[data-theme="dark"] {
+    color-scheme: dark;
+    --bg: #0e141a; --panel: #151d25; --panel-2: #1b2530; --line: #2a3643; --grid: #222d38;
+    --ink: #e6ebf0; --ink-2: #aab5c2; --ink-3: #8593a2;
+    --accent: #6e93ee; --accent-ink: #0e141a;
+    --s1: #3987e5; --s2: #d95926; --s3: #199e70;
+    --div-neg: #e66767; --div-pos: #3987e5; --band: rgba(57, 135, 229, 0.22);
+    --good: #6fd19c; --good-bg: #173427; --warn: #f0c060; --warn-bg: #3a2e12; --bad: #ff8f86; --bad-bg: #3d1c1a;
+  }
+
+  * { box-sizing: border-box; }
+  body { background: var(--bg); color: var(--ink); font: 14px/1.5 var(--sans); margin: 0; }
+  .wrap { max-width: 1320px; margin: 0 auto; padding-inline: 20px; padding-block: 20px 48px; display: grid; gap: 16px; }
+  h1, h2 { font-family: var(--cond); font-weight: 600; letter-spacing: 0.01em; margin: 0; text-wrap: balance; }
+  h1 { font-size: 22px; }
+  h2 { font-size: 15px; }
+  .eyebrow { font: 500 11px/1.2 var(--sans); letter-spacing: 0.08em; text-transform: uppercase; color: var(--ink-3); }
+  .num { font-family: var(--mono); font-variant-numeric: tabular-nums; }
+  .muted { color: var(--ink-2); }
+
+  header.top { display: flex; flex-wrap: wrap; align-items: end; justify-content: space-between; gap: 12px 24px; }
+  header.top p { margin: 4px 0 0; color: var(--ink-2); max-width: 68ch; }
+  .scen { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+  .seg { display: inline-flex; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; background: var(--panel); }
+  .seg button { font: 500 13px var(--sans); color: var(--ink-2); background: transparent; border: 0; padding: 7px 12px; cursor: pointer; }
+  .seg button + button { border-left: 1px solid var(--line); }
+  .seg button[aria-pressed="true"] { background: var(--accent); color: var(--accent-ink); }
+  .btn { font: 500 13px var(--sans); color: var(--ink); background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 7px 12px; cursor: pointer; }
+  .btn:hover, .seg button:hover { filter: brightness(0.97); }
+  button:focus-visible, input:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+  .layout { display: grid; grid-template-columns: 300px minmax(0, 1fr); gap: 16px; align-items: start; }
+  @media (max-width: 960px) { .layout { grid-template-columns: minmax(0, 1fr); } }
+
+  .panel { background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); padding: 16px; min-width: 0; }
+  aside.panel { position: sticky; top: calc(env(safe-area-inset-top, 0px) + 12px); display: grid; gap: 14px; }
+  @media (max-width: 960px) { aside.panel { position: static; } }
+  .group { display: grid; gap: 10px; }
+  .group + .group { border-top: 1px solid var(--line); padding-top: 12px; }
+  .ctl { display: grid; gap: 2px; }
+  .ctl .row { display: flex; justify-content: space-between; gap: 8px; font-size: 13px; }
+  .ctl label { color: var(--ink-2); }
+  .ctl output { font-family: var(--mono); font-size: 12.5px; }
+  .ctl output.changed { color: var(--accent); font-weight: 500; }
+  input[type="range"] { width: 100%; accent-color: var(--accent); margin: 0; }
+
+  main { display: grid; gap: 16px; min-width: 0; }
+  .kpis { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 1px; background: var(--line); border: 1px solid var(--line); border-radius: var(--radius); overflow: hidden; }
+  @media (max-width: 1180px) { .kpis { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+  @media (max-width: 520px) { .kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+  .kpi { background: var(--panel); padding: 12px 14px; display: grid; gap: 2px; }
+  .kpi .v { font: 500 22px/1.2 var(--mono); font-variant-numeric: tabular-nums; }
+  .kpi .d { font-size: 12px; color: var(--ink-3); }
+
+  .grid2 { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
+  @media (max-width: 820px) { .grid2 { grid-template-columns: minmax(0, 1fr); } }
+  .chart-head { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; flex-wrap: wrap; margin-bottom: 8px; }
+  .legend { display: flex; flex-wrap: wrap; gap: 4px 14px; font-size: 12px; color: var(--ink-2); }
+  .legend i { display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin-right: 6px; vertical-align: -1px; }
+  .canvas-box { position: relative; height: 240px; }
+  .canvas-box.tall { height: 300px; }
+
+  .pills { display: flex; flex-wrap: wrap; gap: 6px; }
+  .pill { display: inline-flex; align-items: center; gap: 6px; font-size: 12.5px; padding: 4px 9px; border-radius: 999px; border: 1px solid transparent; }
+  .pill.pass { background: var(--good-bg); color: var(--good); }
+  .pill.warn { background: var(--warn-bg); color: var(--warn); }
+  .pill.fail { background: var(--bad-bg); color: var(--bad); }
+  .verdict { font: 600 13px var(--sans); }
+
+  .table-wrap { overflow-x: auto; }
+  table { border-collapse: collapse; width: 100%; font-size: 13px; }
+  th, td { padding: 7px 10px; text-align: right; border-bottom: 1px solid var(--grid); white-space: nowrap; }
+  th:first-child, td:first-child { text-align: left; }
+  thead th { font: 500 11px var(--sans); letter-spacing: 0.06em; text-transform: uppercase; color: var(--ink-3); }
+  td { font-family: var(--mono); font-variant-numeric: tabular-nums; }
+  td.neg { color: var(--bad); }
+
+  .rec { display: grid; gap: 8px; margin: 0; padding: 0; list-style: none; }
+  .rec li { display: grid; grid-template-columns: auto 1fr; gap: 10px; align-items: start; font-size: 13.5px; }
+  .rec b { font-weight: 600; }
+  .tag { font: 500 11px var(--mono); padding: 2px 6px; border-radius: 4px; background: var(--panel-2); color: var(--ink-2); border: 1px solid var(--line); }
+  pre.patch { background: var(--panel-2); border: 1px solid var(--line); border-radius: 8px; padding: 10px; font: 12px/1.5 var(--mono); max-height: 180px; overflow: auto; margin: 0; white-space: pre-wrap; word-break: break-word; }
+  footer { color: var(--ink-3); font-size: 12px; }
+  @media (prefers-reduced-motion: reduce) { * { transition: none !important; animation: none !important; } }
+</style>
+
+<div class="wrap">
+  <header class="top">
+    <div>
+      <div class="eyebrow">Driver-based model · 36 months · monthly</div>
+      <h1>API SaaS Decision Engine</h1>
+      <p>Move a driver and every line recomputes: signups to paying customers, API calls to fleet size, headcount to cash. The same engine powers the API, the MCP server and the agents.</p>
+    </div>
+    <div class="scen">
+      <div class="seg" role="group" aria-label="Scenario preset" id="presets"></div>
+      <button class="btn" id="reset" type="button">Reset drivers</button>
+    </div>
+  </header>
+
+  <div class="layout">
+    <aside class="panel" aria-label="Drivers" id="drivers"></aside>
+
+    <main>
+      <section class="kpis" id="kpis" aria-label="Key results"></section>
+
+      <section class="panel">
+        <div class="chart-head">
+          <div class="pills" id="policies" aria-label="Policy guardrails"></div>
+          <span class="verdict" id="verdict"></span>
+        </div>
+      </section>
+
+      <div class="grid2">
+        <section class="panel">
+          <div class="chart-head"><h2>MRR by revenue stream</h2><div class="legend" id="mrr-legend"></div></div>
+          <div class="canvas-box"><canvas id="c-mrr" role="img" aria-label="Stacked MRR by stream over time"></canvas></div>
+        </section>
+        <section class="panel">
+          <div class="chart-head"><h2>Cash balance</h2><span class="muted num" id="cash-note"></span></div>
+          <div class="canvas-box"><canvas id="c-cash" role="img" aria-label="Month-end cash balance"></canvas></div>
+        </section>
+        <section class="panel">
+          <div class="chart-head"><h2>Unit economics per 1k API calls</h2><div class="legend" id="unit-legend"></div></div>
+          <div class="canvas-box"><canvas id="c-unit" role="img" aria-label="Revenue and cost per thousand API calls"></canvas></div>
+        </section>
+        <section class="panel">
+          <div class="chart-head"><h2>API fleet at peak</h2><span class="muted num" id="fleet-note"></span></div>
+          <div class="canvas-box"><canvas id="c-fleet" role="img" aria-label="API nodes required at peak by month"></canvas></div>
+        </section>
+      </div>
+
+      <div class="grid2">
+        <section class="panel">
+          <div class="chart-head"><h2>What moves ending ARR most</h2><div class="legend"><span><i style="background:var(--div-neg)"></i>driver −20%</span><span><i style="background:var(--div-pos)"></i>driver +20%</span></div></div>
+          <div class="canvas-box tall"><canvas id="c-tornado" role="img" aria-label="Sensitivity of ending ARR to key drivers"></canvas></div>
+        </section>
+        <section class="panel">
+          <div class="chart-head">
+            <h2>ARR range, 300 simulations</h2>
+            <button class="btn" id="mc-run" type="button">Re-run with new seed</button>
+          </div>
+          <div class="canvas-box tall"><canvas id="c-mc" role="img" aria-label="Monte Carlo ARR P10 to P90 band with median"></canvas></div>
+          <p class="muted" id="mc-note" style="margin:8px 0 0;font-size:13px"></p>
+        </section>
+      </div>
+
+      <section class="panel">
+        <div class="chart-head"><h2>Annual P&amp;L</h2><span class="muted" style="font-size:12px">USD</span></div>
+        <div class="table-wrap"><table id="pnl"></table></div>
+      </section>
+
+      <div class="grid2">
+        <section class="panel">
+          <div class="chart-head"><h2>What the numbers suggest</h2></div>
+          <ul class="rec" id="recs"></ul>
+        </section>
+        <section class="panel">
+          <div class="chart-head"><h2>Scenario patch</h2><button class="btn" id="copy" type="button">Copy JSON</button></div>
+          <pre class="patch" id="patch"></pre>
+          <p class="muted" style="font-size:12.5px;margin:8px 0 0">Send this as <span class="num">scenario</span> to <span class="num">POST /v1/model/run</span>, save it with <span class="num">PUT /v1/scenarios/&lt;name&gt;</span>, or pass it to the <span class="num">run_model</span> MCP tool.</p>
+        </section>
+      </div>
+
+      <footer>Planning model, not accounting or investment advice. Price changes assume no churn response; overage uses tier-average usage.</footer>
+    </main>
+  </div>
+</div>
+
+<script type="module">
+import { runModel, resolveAssumptions, evaluatePolicies, sensitivity, monteCarlo, SCENARIO_PRESETS } from './engine/index.js';
+import { getPath, updatePath } from './engine/util.js';
+
+const PRESET_LABELS = { base: 'Base', bull: 'Bull', bear: 'Bear', efficiency: 'Efficient' };
+// Driver controls. `mult` controls scale every match of a wildcard path; others set the value.
+const CONTROLS = [
+  { group: 'Acquisition', items: [
+    { id: 'organicGrowth', path: 'acquisition.organicGrowth', label: 'Organic signup growth / mo', min: 0, max: 0.1, step: 0.0025, fmt: 'pct1' },
+    { id: 'paidSpend', path: 'acquisition.paidMarketingSpend', label: 'Paid marketing, month 1', min: 0, max: 120000, step: 2500, fmt: 'usdk' },
+    { id: 'cps', path: 'acquisition.costPerSignup', label: 'Cost per paid signup', min: 15, max: 150, step: 1, fmt: 'usd' },
+    { id: 'f2p', path: 'acquisition.freeToPaid', label: 'Free → paid conversion', min: 0.005, max: 0.1, step: 0.0025, fmt: 'pct1' },
+  ] },
+  { group: 'Pricing & retention', items: [
+    { id: 'price', path: 'tiers.*.price', label: 'List prices', min: 0.5, max: 2, step: 0.05, fmt: 'mult', mult: true },
+    { id: 'churn', path: 'tiers.*.churn', label: 'Self-serve churn', min: 0.4, max: 2, step: 0.05, fmt: 'mult', mult: true },
+    { id: 'usage', path: 'tiers.*.usageGrowth', label: 'Usage growth per customer', min: 0, max: 2.5, step: 0.05, fmt: 'mult', mult: true },
+  ] },
+  { group: 'Enterprise', items: [
+    { id: 'deals', path: 'enterprise.dealsPerAEPerMonth', label: 'Deals per AE / mo', min: 0.05, max: 1.2, step: 0.05, fmt: 'dec2' },
+    { id: 'acv', path: 'enterprise.acv', label: 'Enterprise ACV', min: 30000, max: 300000, step: 5000, fmt: 'usdk' },
+  ] },
+  { group: 'Infrastructure', items: [
+    { id: 'rps', path: 'cogs.rpsPerNode', label: 'Throughput per node (req/s)', min: 50, max: 1000, step: 10, fmt: 'int' },
+    { id: 'vendor', path: 'cogs.thirdPartyPer1k', label: 'Vendor cost per 1k calls', min: 0, max: 0.05, step: 0.001, fmt: 'usd3' },
+  ] },
+  { group: 'Capital', items: [
+    { id: 'cash', path: 'capital.startingCash', label: 'Starting cash', min: 500000, max: 20000000, step: 250000, fmt: 'usdm' },
+  ] },
+];
+const FLAT = CONTROLS.flatMap((g) => g.items);
+
+const fmt = {
+  pct1: (v) => `${(v * 100).toFixed(1)}%`,
+  usd: (v) => `$${Math.round(v)}`,
+  usd3: (v) => `$${v.toFixed(3)}`,
+  usdk: (v) => `$${Math.round(v / 1000)}k`,
+  usdm: (v) => `$${(v / 1e6).toFixed(2)}M`,
+  mult: (v) => `×${v.toFixed(2)}`,
+  dec2: (v) => v.toFixed(2),
+  int: (v) => String(Math.round(v)),
+};
+const $M = (v) => (v == null ? '—' : `${v < 0 ? '−' : ''}$${Math.abs(v / 1e6).toFixed(1)}M`);
+const pct = (v) => (v == null ? '—' : `${(v * 100).toFixed(0)}%`);
+const monthName = (p) => { const [y, m] = p.split('-'); return new Date(Date.UTC(+y, +m - 1, 1)).toLocaleString('en-US', { month: 'short', year: 'numeric', timeZone: 'UTC' }); };
+
+let preset = 'base';
+try { const saved = localStorage.getItem('sde.preset'); if (saved && SCENARIO_PRESETS[saved]) preset = saved; } catch {}
+let base;       // resolved assumptions for the preset
+let values = {}; // current slider values
+let mcSeed = 42;
+
+// ── Controls ─────────────────────────────────────────────────────────
+const presetsEl = document.getElementById('presets');
+for (const key of Object.keys(SCENARIO_PRESETS)) {
+  const b = document.createElement('button');
+  b.type = 'button'; b.textContent = PRESET_LABELS[key] ?? key; b.dataset.key = key;
+  b.addEventListener('click', () => { preset = key; try { localStorage.setItem('sde.preset', key); } catch {} loadPreset(); });
+  presetsEl.append(b);
+}
+const driversEl = document.getElementById('drivers');
+for (const g of CONTROLS) {
+  const sec = document.createElement('div');
+  sec.className = 'group';
+  sec.innerHTML = `<div class="eyebrow">${g.group}</div>`;
+  for (const c of g.items) {
+    const wrap = document.createElement('div');
+    wrap.className = 'ctl';
+    wrap.innerHTML = `<div class="row"><label for="d-${c.id}">${c.label}</label><output id="o-${c.id}" for="d-${c.id}"></output></div>
+      <input type="range" id="d-${c.id}" min="${c.min}" max="${c.max}" step="${c.step}">`;
+    wrap.querySelector('input').addEventListener('input', (e) => { values[c.id] = Number(e.target.value); schedule(); });
+    sec.append(wrap);
+  }
+  driversEl.append(sec);
+}
+document.getElementById('reset').addEventListener('click', loadPreset);
+document.getElementById('mc-run').addEventListener('click', () => { mcSeed = Math.floor(Math.random() * 1e6); renderMonteCarlo(); });
+document.getElementById('copy').addEventListener('click', async (e) => {
+  const text = document.getElementById('patch').textContent;
+  try { await navigator.clipboard.writeText(text); e.target.textContent = 'Copied'; }
+  catch { const r = document.createRange(); r.selectNodeContents(document.getElementById('patch')); getSelection().removeAllRanges(); getSelection().addRange(r); e.target.textContent = 'Selected — press Ctrl+C'; }
+  setTimeout(() => { e.target.textContent = 'Copy JSON'; }, 1800);
+});
+
+function defaultValue(c) { return c.mult ? 1 : getPath(base, c.path); }
+
+function loadPreset() {
+  base = resolveAssumptions({ extends: preset });
+  values = Object.fromEntries(FLAT.map((c) => [c.id, defaultValue(c)]));
+  for (const b of presetsEl.children) b.setAttribute('aria-pressed', String(b.dataset.key === preset));
+  for (const c of FLAT) {
+    const input = document.getElementById(`d-${c.id}`);
+    const v = values[c.id];
+    if (!c.mult) { input.min = Math.min(c.min, v); input.max = Math.max(c.max, v); }
+    input.value = v;
+  }
+  recompute(true);
+}
+
+function currentAssumptions() {
+  const a = structuredClone(base);
+  for (const c of FLAT) updatePath(a, c.path, (x) => (c.mult ? x * values[c.id] : values[c.id]));
+  a.tiers.forEach((t) => { t.churn = Math.min(t.churn, 1 - (t.upgradeRate ?? 0)); });
+  return a;
+}
+
+function currentPatch() {
+  const patch = { extends: preset };
+  const tiers = {};
+  for (const c of FLAT) {
+    const v = values[c.id];
+    if (Math.abs(v - defaultValue(c)) < 1e-12) continue;
+    if (c.mult) {
+      const field = c.path.split('.').pop();
+      for (const t of base.tiers) (tiers[t.id] ??= { id: t.id })[field] = +(t[field] * v).toPrecision(6);
+    } else {
+      const keys = c.path.split('.');
+      let o = patch;
+      keys.slice(0, -1).forEach((k) => { o = o[k] ??= {}; });
+      o[keys.at(-1)] = v;
+    }
+  }
+  if (Object.keys(tiers).length) patch.tiers = Object.values(tiers);
+  return patch;
+}
+
+let pending = 0;
+let sensTimer;
+function schedule() {
+  cancelAnimationFrame(pending);
+  pending = requestAnimationFrame(() => recompute(false));
+}
+
+// ── Charts ───────────────────────────────────────────────────────────
+const css = (n) => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+const charts = {};
+function baseOptions(yFmt) {
+  return {
+    responsive: true, maintainAspectRatio: false, animation: false,
+    interaction: { mode: 'index', intersect: false },
+    plugins: {
+      legend: { display: false },
+      tooltip: {
+        backgroundColor: css('--panel'), borderColor: css('--line'), borderWidth: 1,
+        titleColor: css('--ink'), bodyColor: css('--ink-2'), padding: 10, boxPadding: 4,
+        titleFont: { family: 'IBM Plex Sans', weight: '600' }, bodyFont: { family: 'IBM Plex Mono' },
+        callbacks: { label: (ctx) => ` ${ctx.dataset.label}: ${yFmt(ctx.parsed.y ?? ctx.parsed.x)}` },
+      },
+    },
+    scales: {
+      x: { grid: { display: false }, border: { color: css('--line') }, ticks: { color: css('--ink-3'), font: { family: 'IBM Plex Mono', size: 11 }, maxRotation: 0, autoSkipPadding: 18 } },
+      y: { grid: { color: css('--grid') }, border: { display: false }, ticks: { color: css('--ink-3'), font: { family: 'IBM Plex Mono', size: 11 }, callback: yFmt, maxTicksLimit: 6 } },
+    },
+  };
+}
+function upsert(id, config) {
+  if (charts[id]) charts[id].destroy();
+  charts[id] = new Chart(document.getElementById(id), config);
+}
+const shortM = (v) => `$${v >= 1e6 ? (v / 1e6).toFixed(v >= 1e7 ? 0 : 1) + 'M' : Math.round(v / 1e3) + 'k'}`;
+const signedM = (v) => (v < 0 ? `−${shortM(-v)}` : shortM(v));
+const legend = (el, items) => { document.getElementById(el).innerHTML = items.map(([c, t]) => `<span><i style="background:${c}"></i>${t}</span>`).join(''); };
+
+let last;
+function recompute(full) {
+  const a = currentAssumptions();
+  for (const c of FLAT) {
+    const out = document.getElementById(`o-${c.id}`);
+    out.textContent = fmt[c.fmt](values[c.id]);
+    out.classList.toggle('changed', Math.abs(values[c.id] - defaultValue(c)) > 1e-12);
+  }
+  let r;
+  try { r = runModel(a); } catch (err) {
+    document.getElementById('verdict').textContent = err.errors ? err.errors.join('; ') : err.message;
+    return;
+  }
+  last = { a, r };
+  renderKpis(r);
+  renderPolicies(evaluatePolicies(r));
+  renderCharts(r);
+  renderTable(r);
+  renderRecs(r);
+  document.getElementById('patch').textContent = JSON.stringify(currentPatch(), null, 2);
+  clearTimeout(sensTimer);
+  sensTimer = setTimeout(() => { renderTornado(); if (full) renderMonteCarlo(); }, full ? 0 : 200);
+}
+
+function renderKpis(r) {
+  const s = r.summary;
+  const tiles = [
+    ['Ending ARR', $M(s.endingArr), `from ${$M(s.startingArr)} · ${pct(s.arrCagr)} CAGR`],
+    ['Gross margin', pct(s.endingGrossMargin), `$${s.endingCostPer1kCalls.toFixed(3)} COGS / 1k calls`],
+    ['EBITDA breakeven', s.breakevenMonth ? monthName(s.breakevenMonth) : 'Not in horizon', `ending margin ${pct(s.endingEbitdaMargin)}`],
+    ['Cash low point', $M(s.minCash), monthName(s.minCashMonth)],
+    ['LTV : CAC', s.endingLtvToCac == null ? '—' : `${s.endingLtvToCac.toFixed(1)}×`, `payback ${s.endingPaybackMonths?.toFixed(1) ?? '—'} mo`],
+    ['Net revenue retention', pct(s.endingNrr), `${s.endingCustomers.toLocaleString()} customers · ${s.endingHeadcount} staff`],
+  ];
+  document.getElementById('kpis').innerHTML = tiles.map(([k, v, d]) => `<div class="kpi"><span class="eyebrow">${k}</span><span class="v">${v}</span><span class="d">${d}</span></div>`).join('');
+}
+
+function renderPolicies(p) {
+  const icon = { pass: '✓', warn: '!', fail: '✕' };
+  document.getElementById('policies').innerHTML = p.results.map((x) => {
+    const cls = x.status === 'pass' ? 'pass' : x.severity === 'block' ? 'fail' : 'warn';
+    const extra = x.firstBreach ? ` · from ${monthName(x.firstBreach.period)}` : '';
+    return `<span class="pill ${cls}" title="${x.severity} rule"><span aria-hidden="true">${icon[cls]}</span>${x.description}${extra}</span>`;
+  }).join('');
+  const v = document.getElementById('verdict');
+  v.textContent = p.passed ? (p.counts.fail ? `Within blocking limits · ${p.counts.fail} warning${p.counts.fail > 1 ? 's' : ''}` : 'All guardrails pass') : `Blocked: ${p.counts.block} guardrail${p.counts.block > 1 ? 's' : ''} breached`;
+  v.style.color = p.passed ? (p.counts.fail ? css('--warn') : css('--good')) : css('--bad');
+}
+
+function renderCharts(r) {
+  const labels = r.months.map((m) => monthName(m.period));
+  const s1 = css('--s1'), s2 = css('--s2'), s3 = css('--s3'), surface = css('--panel');
+  const area = (label, data, color) => ({ label, data, backgroundColor: color, borderColor: surface, borderWidth: 2, fill: true, pointRadius: 0, pointHoverRadius: 4, tension: 0.2 });
+
+  const subs = r.months.map((m) => m.tiers.reduce((acc, t) => acc + t.subscription, 0));
+  upsert('c-mrr', {
+    type: 'line',
+    data: { labels, datasets: [
+      area('Self-serve plans', subs, s1),
+      area('Usage overage', r.months.map((m) => m.tiers.reduce((acc, t) => acc + t.overage, 0)), s2),
+      area('Enterprise', r.months.map((m) => m.enterpriseMrr), s3),
+    ] },
+    options: { ...baseOptions(shortM), scales: { ...baseOptions(shortM).scales, y: { ...baseOptions(shortM).scales.y, stacked: true, beginAtZero: true } } },
+  });
+  legend('mrr-legend', [[s1, 'Self-serve plans'], [s2, 'Usage overage'], [s3, 'Enterprise']]);
+
+  upsert('c-cash', {
+    type: 'line',
+    data: { labels, datasets: [{ label: 'Cash', data: r.months.map((m) => m.cash), borderColor: s1, backgroundColor: css('--band'), fill: 'origin', borderWidth: 2, pointRadius: 0, pointHoverRadius: 4, tension: 0.15 }] },
+    options: baseOptions(signedM),
+  });
+  const raises = r.assumptions.capital.rounds.map((x) => `${x.label ?? 'Raise'} ${$M(x.amount)} in month ${x.month}`).join(' · ');
+  document.getElementById('cash-note').textContent = raises || 'No raises planned';
+
+  upsert('c-unit', {
+    type: 'line',
+    data: { labels, datasets: [
+      { label: 'Revenue / 1k calls', data: r.months.map((m) => m.revenuePer1kCalls), borderColor: s1, borderWidth: 2, pointRadius: 0, pointHoverRadius: 4, tension: 0.2 },
+      { label: 'COGS / 1k calls', data: r.months.map((m) => m.costPer1kCalls), borderColor: s2, borderWidth: 2, pointRadius: 0, pointHoverRadius: 4, tension: 0.2 },
+    ] },
+    options: { ...baseOptions((v) => `$${Number(v).toFixed(3)}`), scales: { ...baseOptions((v) => `$${Number(v).toFixed(2)}`).scales, y: { ...baseOptions((v) => `$${Number(v).toFixed(2)}`).scales.y, beginAtZero: true } } },
+  });
+  legend('unit-legend', [[s1, 'Revenue'], [s2, 'COGS']]);
+
+  upsert('c-fleet', {
+    type: 'bar',
+    data: { labels, datasets: [{ label: 'Nodes', data: r.months.map((m) => m.nodes), backgroundColor: s1, borderRadius: { topLeft: 4, topRight: 4 }, borderSkipped: 'start', barPercentage: 0.8, categoryPercentage: 0.9 }] },
+    options: { ...baseOptions((v) => String(Math.round(v))), plugins: { ...baseOptions().plugins, tooltip: { ...baseOptions().plugins.tooltip, callbacks: {
+      label: (ctx) => { const m = r.months[ctx.dataIndex]; return [` ${m.nodes} nodes at ${(m.utilization * 100).toFixed(0)}% peak utilisation`, ` ${Math.round(m.peakRps).toLocaleString()} req/s peak`, ` ${(m.apiCalls / 1e9).toFixed(2)}bn calls / month`]; },
+    } } } },
+  });
+  const endM = r.months.at(-1);
+  document.getElementById('fleet-note').textContent = `${Math.round(endM.peakRps).toLocaleString()} req/s peak · ${(endM.apiCalls / 1e9).toFixed(1)}bn calls/mo`;
+}
+
+function renderTornado() {
+  if (!last) return;
+  const s = sensitivity(last.a, { target: 'endingArr', delta: 0.2 });
+  const top = s.drivers.filter((d) => d.swing > 0).slice(0, 8);
+  const neg = css('--div-neg'), pos = css('--div-pos');
+  const opts = baseOptions(signedM);
+  upsert('c-tornado', {
+    type: 'bar',
+    data: {
+      labels: top.map((d) => d.label),
+      datasets: [
+        { label: 'Driver −20%', data: top.map((d) => d.low - s.baseValue), backgroundColor: neg, borderRadius: 4, borderSkipped: false, barPercentage: 0.7 },
+        { label: 'Driver +20%', data: top.map((d) => d.high - s.baseValue), backgroundColor: pos, borderRadius: 4, borderSkipped: false, barPercentage: 0.7 },
+      ],
+    },
+    options: {
+      ...opts, indexAxis: 'y', interaction: { mode: 'index', intersect: false, axis: 'y' },
+      plugins: { ...opts.plugins, tooltip: { ...opts.plugins.tooltip, callbacks: { label: (ctx) => ` ${ctx.dataset.label}: ${signedM(ctx.parsed.x)} vs ${$M(s.baseValue)}` } } },
+      scales: {
+        x: { ...opts.scales.y, stacked: true, ticks: { ...opts.scales.y.ticks, callback: signedM } },
+        y: { ...opts.scales.x, stacked: true, ticks: { ...opts.scales.x.ticks, font: { family: 'IBM Plex Sans', size: 12 }, color: css('--ink-2'), autoSkip: false } },
+      },
+    },
+  });
+}
+
+function renderMonteCarlo() {
+  if (!last) return;
+  const mc = monteCarlo(last.a, { iterations: 300, seed: mcSeed });
+  const labels = last.r.months.map((m) => monthName(m.period));
+  const s1 = css('--s1');
+  upsert('c-mc', {
+    type: 'line',
+    data: { labels, datasets: [
+      { label: 'P90', data: mc.arrFan.map((x) => x.p90), borderColor: 'transparent', backgroundColor: css('--band'), fill: '+1', pointRadius: 0 },
+      { label: 'P10', data: mc.arrFan.map((x) => x.p10), borderColor: 'transparent', pointRadius: 0, fill: false },
+      { label: 'Median', data: mc.arrFan.map((x) => x.p50), borderColor: s1, borderWidth: 2, pointRadius: 0, pointHoverRadius: 4, fill: false },
+    ] },
+    options: baseOptions(shortM),
+  });
+  const a = mc.metrics.endingArr;
+  document.getElementById('mc-note').innerHTML = `Ending ARR P10 <span class="num">${$M(a.p10)}</span> · median <span class="num">${$M(a.p50)}</span> · P90 <span class="num">${$M(a.p90)}</span>. Cash runs out in <span class="num">${(mc.probabilityOfCashOut * 100).toFixed(0)}%</span> of runs. Seed ${mcSeed}.`;
+}
+
+function renderTable(r) {
+  const ys = r.summary.years;
+  const row = (label, f, isMoney = true) => `<tr><td>${label}</td>${ys.map((y) => { const v = f(y); return `<td class="${isMoney && v < 0 ? 'neg' : ''}">${isMoney ? $M(v) : v}</td>`; }).join('')}</tr>`;
+  document.getElementById('pnl').innerHTML = `<thead><tr><th>Year</th>${ys.map((y) => `<th>Year ${y.year}</th>`).join('')}</tr></thead><tbody>
+    ${row('Revenue', (y) => y.revenue)}
+    ${row('Gross profit', (y) => y.grossProfit)}
+    ${row('Gross margin', (y) => pct(y.grossProfit / y.revenue), false)}
+    ${row('EBITDA', (y) => y.ebitda)}
+    ${row('EBITDA margin', (y) => pct(y.ebitda / y.revenue), false)}
+    ${row('Ending ARR', (y) => y.endingArr)}
+    ${row('Ending customers', (y) => y.endingCustomers.toLocaleString(), false)}
+    ${row('Ending headcount', (y) => y.endingHeadcount, false)}
+  </tbody>`;
+}
+
+function renderRecs(r) {
+  const s = r.summary;
+  const p = evaluatePolicies(r);
+  const recs = [];
+  for (const x of p.results.filter((y) => y.status === 'fail' && y.severity === 'block')) recs.push(['P1', `Fix: ${x.description.toLowerCase()}`, `First breach ${monthName(x.firstBreach.period)}. Raise earlier, slow hiring, or cut paid spend.`]);
+  if (s.endingLtvToCac != null && s.endingLtvToCac < 3) recs.push(['P1', 'Unit economics are thin', `LTV:CAC is ${s.endingLtvToCac.toFixed(1)}×. Lower CAC or lift ARPA before scaling spend.`]);
+  if (s.endingGrossMargin < 0.7) recs.push(['P2', 'Gross margin below 70%', 'Raise overage rates, renegotiate vendor cost per 1k calls, or improve node throughput.']);
+  if (s.endingLtvToCac > 5 && !s.cashOutMonth) recs.push(['P2', 'Room to spend on growth', `LTV:CAC of ${s.endingLtvToCac.toFixed(1)}× with cash in hand suggests paid acquisition can scale.`]);
+  if (!s.breakevenMonth) recs.push(['P2', 'No EBITDA breakeven in 36 months', 'Plan the next raise around the cash low point, or test the Efficient preset.']);
+  if (s.endingNrr < 1) recs.push(['P2', 'Net retention under 100%', 'Expansion is not covering churn. Look at upgrade paths and overage pricing.']);
+  if (!recs.length) recs.push(['P3', 'Plan is within guardrails', 'Watch the top drivers in the sensitivity chart month to month.']);
+  document.getElementById('recs').innerHTML = recs.slice(0, 5).map(([pr, t, d]) => `<li><span class="tag">${pr}</span><span><b>${t}.</b> ${d}</span></li>`).join('');
+}
+
+// Re-theme charts when the viewer's theme changes.
+const rerender = () => { if (last) { renderCharts(last.r); renderTornado(); renderMonteCarlo(); } };
+matchMedia('(prefers-color-scheme: dark)').addEventListener('change', rerender);
+new MutationObserver(rerender).observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] });
+
+Chart.defaults.font.family = 'IBM Plex Sans';
+loadPreset();
+</script>

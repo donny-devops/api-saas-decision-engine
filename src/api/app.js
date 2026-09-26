@@ -313,7 +313,7 @@ function setSecurityHeaders(res, path) {
   res.setHeader('referrer-policy', 'no-referrer');
   res.setHeader('x-frame-options', 'DENY');
   res.setHeader('content-security-policy', path === '/'
-    ? "default-src 'self'; script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; connect-src 'self'; img-src 'self' data:"
+    ? "default-src 'self'; script-src 'self' 'unsafe-inline' https://cdnjs.cloudflare.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; connect-src 'self'; img-src 'self' data:"
     : "default-src 'none'; frame-ancestors 'none'");
   if (process.env.NODE_ENV === 'production') res.setHeader('strict-transport-security', 'max-age=63072000; includeSubDomains');
 }
