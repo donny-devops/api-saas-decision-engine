@@ -1,0 +1,424 @@
+openapi: 3.1.0
+info:
+  title: API SaaS Decision Engine
+  version: 0.1.0
+  summary: Driver-based financial model, scenario analysis, agents and pipelines for API-based SaaS.
+  description: |
+    Simulates revenue, cost structure and scalability of a usage-priced API business.
+    Authenticate with `Authorization: Bearer sde_live_…`. Scopes are hierarchical:
+    `read` < `write` < `admin`. Errors use `{ "error": { "status", "message", "details?" } }`.
+  license: { name: MIT }
+servers:
+  - url: http://localhost:8787
+security:
+  - bearer: []
+tags:
+  - { name: Model, description: Run and analyse the financial model }
+  - { name: Scenarios, description: Saved, nestable scenario patches }
+  - { name: Governance, description: Policy rulesets and run history }
+  - { name: Orchestration, description: Pipelines on the async DAG engine }
+  - { name: Agents, description: Master agent, agent mesh, A2A and commerce }
+  - { name: Admin, description: API keys and webhooks }
+  - { name: Hooks, description: Inbound webhooks and mailhooks }
+  - { name: Public, description: Unauthenticated endpoints }
+
+paths:
+  /health:
+    get:
+      tags: [Public]
+      security: []
+      summary: Liveness probe
+      responses:
+        '200': { description: OK, content: { application/json: { schema: { type: object, properties: { status: { const: ok }, time: { type: string }, db: { type: boolean } } } } } }
+  /v1/defaults:
+    get:
+      tags: [Public]
+      security: []
+      summary: Default assumptions, presets, key drivers, policies and metric names
+      responses:
+        '200': { description: OK, content: { application/json: { schema: { type: object } } } }
+  /.well-known/agent.json:
+    get:
+      tags: [Public, Agents]
+      security: []
+      summary: A2A agent card
+      responses:
+        '200': { description: Agent card, content: { application/json: { schema: { type: object } } } }
+
+  /v1/model/run:
+    post:
+      tags: [Model]
+      summary: Run a scenario and evaluate policies
+      description: Emits `model.run.completed`, and `policy.violated` when a blocking rule fails.
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                scenario: { $ref: '#/components/schemas/ScenarioRef' }
+                ruleset: { type: string, description: Saved ruleset name (defaults to built-in policies) }
+                include: { type: string, enum: [summary, months] }
+            example: { scenario: { extends: bull, acquisition: { costPerSignup: 40 } } }
+      responses:
+        '200':
+          description: Run result
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  runId: { type: integer }
+                  summary: { $ref: '#/components/schemas/Summary' }
+                  policies: { $ref: '#/components/schemas/PolicyResult' }
+                  months: { type: array, items: { type: object } }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '422': { $ref: '#/components/responses/Invalid' }
+  /v1/model/compare:
+    post:
+      tags: [Model]
+      summary: Compare scenarios side by side
+      requestBody:
+        content: { application/json: { schema: { type: object, properties: { names: { type: array, items: { type: string } } } } } }
+      responses:
+        '200': { description: Summaries, content: { application/json: { schema: { type: object, properties: { scenarios: { type: array, items: { type: object, properties: { name: { type: string }, summary: { $ref: '#/components/schemas/Summary' } } } } } } } } }
+  /v1/model/sensitivity:
+    post:
+      tags: [Model]
+      summary: Tornado sensitivity of a metric to ±delta shocks on key drivers
+      requestBody:
+        content: { application/json: { schema: { type: object, properties: { scenario: { $ref: '#/components/schemas/ScenarioRef' }, target: { $ref: '#/components/schemas/Metric' }, delta: { type: number, default: 0.2 } } } } }
+      responses:
+        '200': { description: Drivers ranked by swing, content: { application/json: { schema: { type: object } } } }
+  /v1/model/goal-seek:
+    post:
+      tags: [Model]
+      summary: Solve for the driver value that hits a goal
+      description: Wildcard paths (e.g. `tiers.*.price`) solve for a multiplier applied to every match.
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [path, goal]
+              properties:
+                scenario: { $ref: '#/components/schemas/ScenarioRef' }
+                path: { type: string, example: acquisition.paidMarketingSpend }
+                target: { $ref: '#/components/schemas/Metric' }
+                goal: { type: number, example: 30000000 }
+                min: { type: number }
+                max: { type: number }
+      responses:
+        '200': { description: Solution or reason not found, content: { application/json: { schema: { type: object } } } }
+  /v1/model/monte-carlo:
+    post:
+      tags: [Model]
+      summary: Seeded Monte Carlo simulation (P10/P50/P90, ARR fan, cash-out probability)
+      requestBody:
+        content: { application/json: { schema: { type: object, properties: { scenario: { $ref: '#/components/schemas/ScenarioRef' }, iterations: { type: integer, maximum: 5000, default: 500 }, seed: { type: integer, default: 42 } } } } }
+      responses:
+        '200': { description: Distribution, content: { application/json: { schema: { type: object } } } }
+  /v1/model/export.csv:
+    get:
+      tags: [Model]
+      summary: Monthly model output as CSV
+      parameters:
+        - { name: scenario, in: query, schema: { type: string, default: base } }
+      responses:
+        '200': { description: CSV, content: { text/csv: { schema: { type: string } } } }
+
+  /v1/scenarios:
+    get:
+      tags: [Scenarios]
+      summary: List presets and saved scenarios
+      responses: { '200': { description: OK } }
+    post:
+      tags: [Scenarios]
+      summary: Save a scenario (write scope)
+      requestBody:
+        content: { application/json: { schema: { type: object, required: [name], properties: { name: { type: string, pattern: '^[a-z0-9][a-z0-9-]{0,63}$' }, description: { type: string }, patch: { $ref: '#/components/schemas/Scenario' } } } } }
+      responses:
+        '201': { description: Saved }
+        '409': { description: Name is a preset }
+        '422': { $ref: '#/components/responses/Invalid' }
+  /v1/scenarios/{name}:
+    parameters: [{ name: name, in: path, required: true, schema: { type: string } }]
+    get:
+      tags: [Scenarios]
+      summary: Get a scenario
+      responses: { '200': { description: OK }, '404': { description: Not found } }
+    put:
+      tags: [Scenarios]
+      summary: Create or replace a scenario (write scope)
+      requestBody:
+        content: { application/json: { schema: { type: object, properties: { description: { type: string }, patch: { $ref: '#/components/schemas/Scenario' } } } } }
+      responses: { '201': { description: Saved } }
+    delete:
+      tags: [Scenarios]
+      summary: Delete a scenario (write scope); refused while another scenario extends it
+      responses: { '204': { description: Deleted }, '409': { description: Has children } }
+
+  /v1/runs:
+    get:
+      tags: [Governance]
+      summary: Recent model runs
+      parameters: [{ name: limit, in: query, schema: { type: integer, maximum: 200 } }]
+      responses: { '200': { description: OK } }
+  /v1/runs/{id}:
+    get:
+      tags: [Governance]
+      summary: One run with inputs, summary and policy outcome
+      parameters: [{ name: id, in: path, required: true, schema: { type: integer } }]
+      responses: { '200': { description: OK }, '404': { description: Not found } }
+  /v1/rulesets:
+    get:
+      tags: [Governance]
+      summary: Default and saved policy rulesets
+      responses: { '200': { description: OK } }
+    post:
+      tags: [Governance]
+      summary: Save a ruleset (write scope)
+      requestBody:
+        content: { application/json: { schema: { type: object, required: [name, rules], properties: { name: { type: string }, rules: { type: array, items: { $ref: '#/components/schemas/PolicyRule' } } } } } }
+      responses: { '201': { description: Saved }, '400': { description: Invalid rules } }
+
+  /v1/pipelines:
+    get:
+      tags: [Orchestration]
+      summary: List pipelines and their task DAGs
+      responses: { '200': { description: OK } }
+  /v1/pipelines/{name}/run:
+    post:
+      tags: [Orchestration]
+      summary: Start a pipeline asynchronously (write scope)
+      parameters: [{ name: name, in: path, required: true, schema: { type: string, enum: [nightly-forecast, board-pack, pricing-review] } }]
+      requestBody:
+        content: { application/json: { schema: { type: object, properties: { input: { type: object } } } } }
+      responses:
+        '202': { description: Started, content: { application/json: { schema: { type: object, properties: { id: { type: string }, status: { const: running }, links: { type: object } } } } } }
+  /v1/pipeline-runs/{id}:
+    get:
+      tags: [Orchestration]
+      summary: Poll a pipeline run
+      parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
+      responses: { '200': { description: Run with task statuses and output } }
+
+  /v1/agents:
+    get:
+      tags: [Agents]
+      summary: Agent mesh directory
+      responses: { '200': { description: OK } }
+  /v1/agents/trace:
+    get:
+      tags: [Agents]
+      summary: Recent inter-agent messages
+      responses: { '200': { description: OK } }
+  /v1/agents/master/ask:
+    post:
+      tags: [Agents]
+      summary: Ask the master agent a question
+      requestBody:
+        content: { application/json: { schema: { type: object, required: [question], properties: { question: { type: string, maxLength: 2000 }, scenario: { $ref: '#/components/schemas/ScenarioRef' } } } } }
+      responses: { '200': { description: Plan, evidence, recommendations and narrative } }
+  /a2a:
+    post:
+      tags: [Agents]
+      summary: A2A JSON-RPC endpoint (`message/send`, `tasks/get`)
+      requestBody:
+        content:
+          application/json:
+            schema: { type: object }
+            example:
+              jsonrpc: '2.0'
+              id: 1
+              method: message/send
+              params: { message: { role: user, parts: [{ kind: data, data: { skill: treasurer.runway, input: {} } }] } }
+      responses: { '200': { description: JSON-RPC response with a Task } }
+  /v1/commerce/balance:
+    get:
+      tags: [Agents]
+      summary: Credit balance and statement for the caller
+      responses: { '200': { description: OK } }
+  /v1/commerce/quote:
+    post:
+      tags: [Agents]
+      summary: Quote a skill execution in credits (valid 10 minutes)
+      requestBody:
+        content: { application/json: { schema: { type: object, required: [agent, skill], properties: { agent: { type: string }, skill: { type: string }, input: { type: object } } } } }
+      responses: { '200': { description: Quote } }
+  /v1/commerce/accept:
+    post:
+      tags: [Agents]
+      summary: Accept a quote — debits credits, executes, refunds on failure (write scope)
+      requestBody:
+        content: { application/json: { schema: { type: object, required: [quoteId], properties: { quoteId: { type: string } } } } }
+      responses:
+        '200': { description: Settled with output }
+        '402': { description: Insufficient credits }
+        '409': { description: Quote already used }
+        '410': { description: Quote expired }
+  /v1/commerce/top-up:
+    post:
+      tags: [Admin]
+      summary: Grant credits to an account (admin)
+      requestBody:
+        content: { application/json: { schema: { type: object, required: [account, credits], properties: { account: { type: string }, credits: { type: integer, minimum: 1 }, reason: { type: string } } } } }
+      responses: { '200': { description: New balance } }
+
+  /v1/api-keys:
+    get:
+      tags: [Admin]
+      summary: List API keys (hash prefixes only)
+      responses: { '200': { description: OK } }
+    post:
+      tags: [Admin]
+      summary: Create an API key — the plaintext key is returned once
+      requestBody:
+        content: { application/json: { schema: { type: object, required: [name], properties: { name: { type: string }, scope: { type: string, enum: [read, write, admin] } } } } }
+      responses: { '201': { description: Created } }
+  /v1/api-keys/{id}:
+    delete:
+      tags: [Admin]
+      summary: Revoke an API key
+      parameters: [{ name: id, in: path, required: true, schema: { type: integer } }]
+      responses: { '204': { description: Revoked } }
+  /v1/webhooks:
+    get:
+      tags: [Admin]
+      summary: List webhook endpoints
+      responses: { '200': { description: OK } }
+    post:
+      tags: [Admin]
+      summary: Register a webhook — the signing secret is returned once
+      requestBody:
+        content: { application/json: { schema: { type: object, required: [url], properties: { url: { type: string, format: uri }, events: { type: array, items: { $ref: '#/components/schemas/WebhookEvent' } } } } } }
+      responses: { '201': { description: Created }, '400': { description: Invalid or private URL } }
+  /v1/webhooks/{id}:
+    delete:
+      tags: [Admin]
+      summary: Delete a webhook
+      parameters: [{ name: id, in: path, required: true, schema: { type: integer } }]
+      responses: { '204': { description: Deleted } }
+  /v1/webhooks/{id}/deliveries:
+    get:
+      tags: [Admin]
+      summary: Delivery log
+      parameters: [{ name: id, in: path, required: true, schema: { type: integer } }]
+      responses: { '200': { description: OK } }
+
+  /v1/hooks/inbound-email:
+    post:
+      tags: [Hooks]
+      security: [{ inboundToken: [] }]
+      summary: Mailhook — email commands (run, compare, ask, pipeline)
+      requestBody:
+        content: { application/json: { schema: { type: object, required: [from, subject], properties: { from: { type: string }, subject: { type: string, example: 'compare base, bear' }, text: { type: string } } } } }
+      responses: { '202': { description: Accepted / ignored / rejected-sender }, '401': { description: Bad token } }
+  /v1/hooks/github:
+    post:
+      tags: [Hooks]
+      security: [{ githubSignature: [] }]
+      summary: GitHub webhook — a push to the default branch triggers nightly-forecast
+      responses: { '202': { description: Triggered or ignored }, '401': { description: Bad signature } }
+
+webhooks:
+  modelRunCompleted:
+    post:
+      summary: '`model.run.completed` (all events share this envelope)'
+      description: |
+        Headers: `X-SDE-Event`, `X-SDE-Signature: t=<unix>,v1=<hex>` where
+        `v1 = HMAC_SHA256(secret, "<t>.<raw body>")`. Reject if |now − t| > 300 s.
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                id: { type: string }
+                event: { $ref: '#/components/schemas/WebhookEvent' }
+                created: { type: string, format: date-time }
+                data: { type: object }
+      responses: { '2XX': { description: Acknowledged } }
+
+components:
+  securitySchemes:
+    bearer: { type: http, scheme: bearer, description: 'API key, e.g. sde_live_…' }
+    inboundToken: { type: apiKey, in: header, name: X-Inbound-Token }
+    githubSignature: { type: apiKey, in: header, name: X-Hub-Signature-256 }
+  responses:
+    Unauthorized:
+      description: Missing or invalid API key
+      content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } }
+    Invalid:
+      description: Assumptions failed validation
+      content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } }
+  schemas:
+    Error:
+      type: object
+      properties:
+        error: { type: object, properties: { status: { type: integer }, message: { type: string }, details: { type: array, items: { type: string } } } }
+    Metric:
+      type: string
+      enum: [endingArr, endingCash, minCash, endingEbitdaMargin, endingGrossMargin, endingLtvToCac, endingCustomers, cumulativeEbitda]
+    ScenarioRef:
+      description: Preset or saved scenario name, or an inline scenario patch
+      oneOf:
+        - { type: string, example: bull }
+        - { $ref: '#/components/schemas/Scenario' }
+    Scenario:
+      type: object
+      description: Partial assumptions deep-merged over the defaults (or over `extends`). Arrays with `id` merge by id.
+      properties:
+        extends: { oneOf: [{ type: string }, { type: object }] }
+        meta: { type: object, properties: { name: { type: string }, startMonth: { type: string, pattern: '^\d{4}-\d{2}$' }, months: { type: integer, minimum: 1, maximum: 120 } } }
+        acquisition: { type: object }
+        tiers: { type: array, items: { type: object, required: [id], properties: { id: { type: string }, price: { type: number }, churn: { type: number } } } }
+        enterprise: { type: object }
+        pricing: { type: object }
+        cogs: { type: object }
+        headcount: { type: object }
+        opex: { type: object }
+        capital: { type: object }
+      additionalProperties: false
+    Summary:
+      type: object
+      properties:
+        scenario: { type: string }
+        startingArr: { type: number }
+        endingArr: { type: number }
+        arrCagr: { type: number }
+        endingGrossMargin: { type: number }
+        endingEbitdaMargin: { type: number }
+        endingNrr: { type: number }
+        endingLtvToCac: { type: number }
+        endingPaybackMonths: { type: number }
+        endingCostPer1kCalls: { type: number }
+        peakNodes: { type: integer }
+        breakevenMonth: { type: [string, 'null'] }
+        cashOutMonth: { type: [string, 'null'] }
+        minCash: { type: number }
+        minCashMonth: { type: string }
+        endingCash: { type: number }
+        years: { type: array, items: { type: object } }
+    PolicyRule:
+      type: object
+      required: [id, metric, op, value]
+      properties:
+        id: { type: string }
+        description: { type: string }
+        severity: { type: string, enum: [info, warn, block] }
+        scope: { type: string, enum: [summary, every-month, last-month] }
+        metric: { type: string }
+        op: { type: string, enum: ['<', '<=', '>', '>=', '==', '!='] }
+        value: { type: number }
+        fromMonth: { type: integer, description: 'Negative counts back from the end' }
+        nullMeans: { type: string, enum: [pass, fail] }
+    PolicyResult:
+      type: object
+      properties:
+        passed: { type: boolean }
+        counts: { type: object }
+        results: { type: array, items: { type: object } }
+    WebhookEvent:
+      type: string
+      enum: ['*', model.run.completed, policy.violated, scenario.saved, scenario.deleted, pipeline.completed, pipeline.failed, a2a.task.completed, commerce.settled]
