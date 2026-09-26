@@ -1,0 +1,16 @@
+# Replace @OWNER with your GitHub user or team (e.g. @acme/finance-eng).
+
+# Default owner
+*                         @OWNER
+
+# Financial logic: model, drivers and guardrail policies
+/src/engine/              @OWNER
+/pipelines/               @OWNER
+
+# Security-sensitive paths
+/src/secrets/             @OWNER
+/src/api/auth.js          @OWNER
+/src/webhooks/            @OWNER
+/.github/                 @OWNER
+/.gitleaks.toml           @OWNER
+/Dockerfile               @OWNER

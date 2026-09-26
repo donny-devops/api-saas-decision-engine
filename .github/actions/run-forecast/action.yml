@@ -1,0 +1,43 @@
+name: Run SaaS forecast
+description: Run the driver-based model for a scenario, publish the summary, and optionally fail on blocking policy breaches.
+inputs:
+  scenario:
+    description: Scenario preset or saved scenario name
+    default: base
+  fail-on-policy:
+    description: Fail the step when a blocking policy is breached
+    default: 'true'
+  node-version:
+    description: Node.js version
+    default: '24'
+outputs:
+  ending-arr:
+    description: Ending ARR for the scenario
+    value: ${{ steps.run.outputs.ending-arr }}
+  policy-passed:
+    description: Whether all blocking policies passed
+    value: ${{ steps.run.outputs.policy-passed }}
+runs:
+  using: composite
+  steps:
+    - uses: actions/setup-node@v4
+      with:
+        node-version: ${{ inputs.node-version }}
+    - id: run
+      shell: bash
+      env:
+        SCENARIO: ${{ inputs.scenario }}
+      run: |
+        node src/cli/index.js run "$SCENARIO" --json > forecast.json
+        node -e '
+          const r = require("./forecast.json");
+          const fs = require("fs");
+          fs.appendFileSync(process.env.GITHUB_OUTPUT, `ending-arr=${r.summary.endingArr}\npolicy-passed=${r.policies.passed}\n`);
+          const rows = r.policies.results.map(p => `| ${p.status === "pass" ? "✅" : p.severity === "block" ? "⛔" : "⚠️"} | ${p.id} | ${p.description} |`).join("\n");
+          fs.appendFileSync(process.env.GITHUB_STEP_SUMMARY, `### Forecast: ${r.summary.scenario}\n\nEnding ARR **$${(r.summary.endingArr/1e6).toFixed(1)}M**, min cash $${(r.summary.minCash/1e6).toFixed(1)}M (${r.summary.minCashMonth}), breakeven ${r.summary.breakevenMonth ?? "—"}\n\n| | Policy | |\n|---|---|---|\n${rows}\n`);
+        '
+    - if: inputs.fail-on-policy == 'true' && steps.run.outputs.policy-passed != 'true'
+      shell: bash
+      run: |
+        echo "::error::Blocking financial policy breached for scenario ${{ inputs.scenario }}"
+        exit 1

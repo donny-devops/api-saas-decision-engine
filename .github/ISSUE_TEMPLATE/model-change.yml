@@ -1,0 +1,21 @@
+name: Model / driver change
+description: Propose a change to an assumption, driver or formula
+labels: [model]
+body:
+  - type: input
+    id: driver
+    attributes:
+      label: Driver path
+      placeholder: e.g. acquisition.freeToPaid
+    validations:
+      required: true
+  - type: textarea
+    id: rationale
+    attributes:
+      label: Rationale and evidence
+    validations:
+      required: true
+  - type: textarea
+    id: impact
+    attributes:
+      label: Expected impact on ARR / cash / margin

@@ -1,0 +1,4 @@
+#!/bin/sh
+# Enable once per clone:  git config core.hooksPath .githooks
+node scripts/scan-secrets.js --staged || exit 1
+node scripts/lint.js > /dev/null || { node scripts/lint.js; exit 1; }

@@ -1,0 +1,44 @@
+name: Nightly forecast
+
+# Triggers: cron, manual dispatch (pick a scenario), and repository_dispatch so
+# external systems (e.g. a billing webhook) can request a fresh forecast.
+on:
+  schedule:
+    - cron: '0 6 * * *'
+  workflow_dispatch:
+    inputs:
+      scenario:
+        description: Scenario preset to forecast
+        type: choice
+        options: [base, bull, bear, efficiency]
+        default: base
+  repository_dispatch:
+    types: [forecast-requested]
+
+permissions:
+  contents: read
+
+jobs:
+  digest:
+    runs-on: ubuntu-latest
+    environment: forecasting
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - name: Run nightly-forecast pipeline and post digest
+        env:
+          DIGEST_SCENARIO: ${{ inputs.scenario || github.event.client_payload.scenario || 'base' }}
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+          SECRETS_PROVIDERS: env
+        run: npm run digest
+      - name: Publish report to job summary
+        if: always()
+        run: cat exports/nightly-forecast.md >> "$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: nightly-forecast
+          path: exports/
+          retention-days: 30
