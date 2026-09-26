@@ -1,5 +1,5 @@
 node_modules/
-data/
+/data/
 *.db
 *.db-journal
 *.db-wal
@@ -7,8 +7,8 @@ data/
 .env
 .env.*
 !.env.example
-secrets/
+/secrets/
 coverage/
 .DS_Store
 *.log
-exports/
+/exports/
