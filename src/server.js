@@ -1,14 +1,25 @@
 const express = require("express");
+const rateLimit = require("express-rate-limit");
 const path = require("path");
 const { evaluateDecision } = require("./decisionEngine");
 
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-app.use(express.json());
-app.use(express.static(path.join(__dirname, "..", "public")));
+const apiLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: 60,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: "Too many requests. Please try again later." },
+});
 
-app.get("/health", (req, res) => {
+const publicDir = path.join(__dirname, "..", "public");
+
+app.use(express.json());
+app.use("/", apiLimiter, express.static(publicDir));
+
+app.get("/health", apiLimiter, (req, res) => {
   res.json({
     status: "ok",
     app: "api-saas-decision-engine",
@@ -16,13 +27,13 @@ app.get("/health", (req, res) => {
   });
 });
 
-app.post("/api/decide", (req, res) => {
+app.post("/api/decide", apiLimiter, (req, res) => {
   const result = evaluateDecision(req.body || {});
   res.json(result);
 });
 
-app.get("/", (req, res) => {
-  res.sendFile(path.join(__dirname, "..", "public", "index.html"));
+app.get("/", apiLimiter, (req, res) => {
+  res.sendFile(path.join(publicDir, "index.html"));
 });
 
 app.use((req, res) => {
