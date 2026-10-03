@@ -1,0 +1,13 @@
+{
+  "name": "api-saas-decision-engine",
+  "version": "1.0.0",
+  "description": "A small SaaS decision engine API for evaluating customer health and product fit.",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "test": "node --test"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}
