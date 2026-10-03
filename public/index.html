@@ -1,0 +1,193 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>SaaS Decision Engine</title>
+    <style>
+      :root {
+        --bg: #0f172a;
+        --panel: #111827;
+        --panel-2: #1f2937;
+        --text: #e5e7eb;
+        --muted: #9ca3af;
+        --primary: #60a5fa;
+        --success: #34d399;
+        --shadow: rgba(15, 23, 42, 0.35);
+      }
+
+      * { box-sizing: border-box; }
+
+      body {
+        margin: 0;
+        font-family: Arial, sans-serif;
+        background: linear-gradient(135deg, var(--bg), #111827 45%, #1e293b);
+        color: var(--text);
+      }
+
+      .container {
+        max-width: 960px;
+        margin: 48px auto;
+        padding: 24px;
+      }
+
+      .panel {
+        background: rgba(17, 24, 39, 0.9);
+        border: 1px solid rgba(96, 165, 250, 0.25);
+        border-radius: 16px;
+        box-shadow: 0 20px 50px var(--shadow);
+        padding: 24px;
+      }
+
+      h1 {
+        margin-top: 0;
+        font-size: clamp(2rem, 4vw, 3rem);
+      }
+
+      .grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+        gap: 16px;
+      }
+
+      label {
+        display: block;
+        margin-bottom: 8px;
+        color: var(--muted);
+        font-size: 0.92rem;
+      }
+
+      input, select {
+        width: 100%;
+        padding: 11px 12px;
+        border-radius: 10px;
+        border: 1px solid rgba(148, 163, 184, 0.35);
+        background: var(--panel-2);
+        color: var(--text);
+      }
+
+      button {
+        margin-top: 8px;
+        border: none;
+        border-radius: 10px;
+        padding: 12px 18px;
+        background: linear-gradient(135deg, var(--primary), #3b82f6);
+        color: white;
+        font-weight: 700;
+        cursor: pointer;
+      }
+
+      .result {
+        margin-top: 24px;
+        background: rgba(15, 23, 42, 0.9);
+        border: 1px solid rgba(52, 211, 153, 0.3);
+        border-radius: 12px;
+        padding: 20px;
+      }
+
+      .score {
+        font-size: 2rem;
+        font-weight: 700;
+        color: var(--success);
+      }
+
+      .small {
+        color: var(--muted);
+        font-size: 0.9rem;
+      }
+
+      ul {
+        padding-left: 18px;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="container">
+      <div class="panel">
+        <h1>SaaS Decision Engine</h1>
+        <form id="decision-form">
+          <div class="grid">
+            <div>
+              <label for="customerTier">Customer tier</label>
+              <select id="customerTier" name="customerTier">
+                <option value="starter">Starter</option>
+                <option value="growth">Growth</option>
+                <option value="enterprise">Enterprise</option>
+              </select>
+            </div>
+            <div>
+              <label for="monthlyRevenue">Monthly revenue</label>
+              <input id="monthlyRevenue" name="monthlyRevenue" type="number" value="60000" />
+            </div>
+            <div>
+              <label for="contractLength">Contract length (months)</label>
+              <input id="contractLength" name="contractLength" type="number" value="18" />
+            </div>
+            <div>
+              <label for="teamSize">Team size</label>
+              <input id="teamSize" name="teamSize" type="number" value="120" />
+            </div>
+            <div>
+              <label for="region">Region</label>
+              <select id="region" name="region">
+                <option value="us">US</option>
+                <option value="eu">EU</option>
+                <option value="apac">APAC</option>
+                <option value="global">Global</option>
+              </select>
+            </div>
+            <div>
+              <label for="riskScore">Risk score</label>
+              <input id="riskScore" name="riskScore" type="number" min="0" max="100" value="25" />
+            </div>
+          </div>
+          <button type="submit">Evaluate</button>
+        </form>
+
+        <div id="result" class="result" aria-live="polite">
+          <div class="small">Results will appear here.</div>
+        </div>
+      </div>
+    </div>
+
+    <script>
+      const form = document.getElementById('decision-form');
+      const result = document.getElementById('result');
+
+      form.addEventListener('submit', async (event) => {
+        event.preventDefault();
+
+        const payload = {
+          customerTier: document.getElementById('customerTier').value,
+          monthlyRevenue: Number(document.getElementById('monthlyRevenue').value || 0),
+          contractLength: Number(document.getElementById('contractLength').value || 0),
+          teamSize: Number(document.getElementById('teamSize').value || 0),
+          region: document.getElementById('region').value,
+          riskScore: Number(document.getElementById('riskScore').value || 0),
+        };
+
+        try {
+          const response = await fetch('/api/decide', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload),
+          });
+
+          const data = await response.json();
+
+          result.innerHTML = `
+            <div class="small">Recommendation</div>
+            <div class="score">${data.score}</div>
+            <h2>${data.recommendation}</h2>
+            <p>${data.summary}</p>
+            <ul>
+              ${data.reasons.map((reason) => `<li>${reason}</li>`).join('')}
+            </ul>
+          `;
+        } catch (error) {
+          result.innerHTML = `<p>Unable to evaluate the submission.</p>`;
+        }
+      });
+    </script>
+  </body>
+</html>
