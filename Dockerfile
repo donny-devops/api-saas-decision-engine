@@ -1,6 +1,6 @@
 # syntax=docker/dockerfile:1.7
 # Zero npm dependencies: no install step and a minimal attack surface.
-FROM node:24-alpine AS base
+FROM node:25-alpine AS base
 ENV NODE_ENV=production \
     HOST=0.0.0.0 \
     PORT=8787 \
