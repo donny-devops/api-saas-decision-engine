@@ -15,6 +15,9 @@ multi-agent conversation (`GET /v1/agents/trace`).
 | `pricing-strategist` | `priceImpact` (2), `requiredPrice` (3) |
 | `capacity-planner` | `scaling` (1) |
 | `treasurer` | `runway` (1) |
+| `quant-strategist` | `marketSignals` (3), `hybridValuation` (4) |
+| `crypto-watcher` | `trendSpotter` (3) |
+| `forensics-auditor` | `benfordAudit` (4) |
 | `master` | `ask` (10) |
 
 ## Master agent
@@ -60,6 +63,8 @@ POST /v1/commerce/accept {quoteId}               → debit (atomic) → execute 
 - `pricing-strategist`: price and packaging experiments.
 - `platform-engineer`: capacity and unit cost.
 - `model-reviewer`: reviews driver and formula changes in pull requests.
+- `quant-crypto-strategist`: algorithmic trading signals, crypto trend spotting, and SaaS valuation multiples.
+- `pqc-forensics-auditor`: Benford's Law forensic audit, digital transformation maturity, and PQC chain verification.
 
 The `saas-financial-model` skill in `.claude/skills/` teaches Claude the driver tree and the
 tool workflow.

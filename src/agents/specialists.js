@@ -2,8 +2,10 @@
 // skills; they are deterministic (no LLM needed) so their answers are auditable.
 import {
   runModel, resolveAssumptions, compareScenarios, sensitivity, monteCarlo, goalSeek, evaluatePolicies, DEFAULT_POLICIES,
+  evaluateEquitySignals, analyzeCryptoTrends, runHybridQuantEngine, runDigitalForensics,
 } from '../engine/index.js';
 import { round, sum } from '../engine/util.js';
+import { PqcAlgorithmicChain, PQC_ALGORITHMS, EMBEDDED_PQC_VECTORS } from '../secrets/pqc.js';
 
 export function createSpecialists({ lookup, rulesFor = () => DEFAULT_POLICIES } = {}) {
   const run = (scenario) => runModel(scenario ?? {}, { lookup });
@@ -104,5 +106,64 @@ export function createSpecialists({ lookup, rulesFor = () => DEFAULT_POLICIES } 
     },
   };
 
-  return [forecaster, risk, pricing, capacity, treasurer];
+  const quantStrategist = {
+    name: 'quant-strategist',
+    description: 'Algorithmic trading & equity factor signals, Sharpe/Sortino/VaR/Kelly sizing, and hybrid SaaS valuation.',
+    skills: {
+      equitySignal: {
+        description: 'Regime-adaptive algorithmic trading signal (Hurst, RSI, MACD, Bollinger, Kelly) for a stock ticker',
+        credits: 2,
+        handler: async ({ symbol = 'CLWD', seed = 1337 }) => evaluateEquitySignals({ symbol, seed }),
+      },
+      hybridValuation: {
+        description: 'Hybrid SaaS fundamental + public-market multiples & treasury yield optimization',
+        credits: 3,
+        handler: async ({ scenario, seed = 1337 }) => runHybridQuantEngine(run(scenario), { seed }),
+      },
+    },
+  };
+
+  const cryptoWatcher = {
+    name: 'crypto-watcher',
+    description: 'Cryptocurrency trend spotting, on-chain MVRV/NVT valuation, perp funding basis carry, and market watch.',
+    skills: {
+      cryptoTrend: {
+        description: 'Analyze crypto trend, cycle phase, MVRV Z-score, NVT ratio, and perpetual basis carry',
+        credits: 2,
+        handler: async ({ symbol = 'BTC-USD', seed = 2026 }) => analyzeCryptoTrends({ symbol, seed }),
+      },
+    },
+  };
+
+  const forensicsAuditor = {
+    name: 'forensics-auditor',
+    description: 'Digital forensics (Benford chi-square, Z-score anomaly detection), PQC algorithmic chain attestation, and digital transformation readiness.',
+    skills: {
+      audit: {
+        description: 'Run Benford first-digit forensics, anomaly detection, PQC chain attestation, and digital transformation scorecard',
+        credits: 3,
+        handler: async ({ scenario }) => {
+          const modelResult = run(scenario);
+          const forensics = runDigitalForensics(modelResult);
+          const chain = new PqcAlgorithmicChain();
+          const block = chain.append('forensics.audit.completed', {
+            scenario: modelResult.summary.scenario,
+            conformityStatus: forensics.benfordAnalysis.conformityStatus,
+            maturityIndex: forensics.digitalTransformation.maturityIndex,
+          });
+          return {
+            ...forensics,
+            pqcAttestation: {
+              algorithms: PQC_ALGORITHMS,
+              vectorVersion: EMBEDDED_PQC_VECTORS.version,
+              headBlockHash: block.blockHash,
+              chainVerification: chain.verifyChain(),
+            },
+          };
+        },
+      },
+    },
+  };
+
+  return [forecaster, risk, pricing, capacity, treasurer, quantStrategist, cryptoWatcher, forensicsAuditor];
 }

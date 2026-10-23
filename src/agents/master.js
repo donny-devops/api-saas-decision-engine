@@ -10,6 +10,9 @@ const INTENTS = [
   { match: /risk|downside|probab|monte|uncertain|worst/i, steps: [{ id: 'stress', agent: 'risk-analyst', skill: 'stress' }] },
   { match: /compare|scenario|bull|bear|case/i, steps: [{ id: 'compare', agent: 'forecaster', skill: 'compare' }] },
   { match: /driver|lever|sensitiv|matter|focus|priorit/i, steps: [{ id: 'drivers', agent: 'forecaster', skill: 'drivers' }] },
+  { match: /quant|trad|stock|equit|sharpe|kelly|market|multiple|valuat|hybrid/i, steps: [{ id: 'hybridValuation', agent: 'quant-strategist', skill: 'hybridValuation' }] },
+  { match: /crypto|bitcoin|btc|eth|solana|on-chain|mvrv|funding|trend/i, steps: [{ id: 'cryptoTrend', agent: 'crypto-watcher', skill: 'cryptoTrend' }] },
+  { match: /forensic|benford|anomal|pqc|quantum|transform|audit/i, steps: [{ id: 'audit', agent: 'forensics-auditor', skill: 'audit' }] },
 ];
 
 export function plan(question = '') {
@@ -44,6 +47,16 @@ export function synthesize(r) {
   }
   if (r.scaling && r.scaling.infraShareOfCogs > 0.5) recs.push({ priority: 3, title: 'Infra dominates COGS', detail: `${pct(r.scaling.infraShareOfCogs)} of COGS is compute/egress — prioritise efficiency work.` });
   if (r.drivers?.top?.length) recs.push({ priority: 3, title: `Focus lever: ${r.drivers.top[0].label}`, detail: `±20% on it swings ${r.drivers.target} by ${$m(r.drivers.top[0].swing)}.` });
+  if (r.hybridValuation?.saasValuationBridge) {
+    const vb = r.hybridValuation.saasValuationBridge;
+    recs.push({ priority: 2, title: `Implied EV ${$m(vb.impliedEnterpriseValue)} (${vb.impliedArrMultiple}× ARR)`, detail: `Market Watch benchmarks peer median at ${vb.peerMedianMultiple}× and top quartile at ${vb.topQuartileMultiple}×.` });
+  }
+  if (r.cryptoTrend) {
+    recs.push({ priority: 3, title: `Crypto regime (${r.cryptoTrend.symbol}): ${r.cryptoTrend.cyclePhase}`, detail: `Signal ${r.cryptoTrend.signal} (MVRV Z=${r.cryptoTrend.onChainMetrics.mvrvZScore}, basis carry ${r.cryptoTrend.onChainMetrics.annualizedBasisCarryPct}%).` });
+  }
+  if (r.audit) {
+    recs.push({ priority: 2, title: `Forensics & PQC Audit: ${r.audit.benfordAnalysis.conformityStatus}`, detail: `Transformation maturity ${r.audit.digitalTransformation.maturityIndex}/100 (${r.audit.digitalTransformation.tier}); PQC chain valid=${r.audit.pqcAttestation.chainVerification.valid}.` });
+  }
   if (!recs.length) recs.push({ priority: 3, title: 'Plan is within policy', detail: 'No guardrail breaches; monitor the key drivers monthly.' });
   recs.sort((a, b) => a.priority - b.priority);
 

@@ -10,6 +10,8 @@ scalability month by month, and wraps the model in the tools a team needs to use
 - policy guardrails
 - pipelines on an async DAG engine
 - a master agent that coordinates specialist agents over A2A
+- post-quantum cryptography (PQC) hybrid chains (`ML-KEM-768` + `X25519`, `ML-DSA-65` + `Ed25519`)
+- quantitative equity trading signals, cryptocurrency trend spotting, market watch & Benford digital forensics
 
 It has **zero npm dependencies**. It needs Node ≥ 22.5 and nothing else.
 
@@ -42,6 +44,10 @@ node src/cli/index.js goal-seek acquisition.paidMarketingSpend 30000000
 node src/cli/index.js monte-carlo base --iterations 1000
 node src/cli/index.js ask "Should we raise prices, and how long is our runway?"
 node src/cli/index.js pipeline nightly-forecast
+node src/cli/index.js quant base
+node src/cli/index.js stocks CLWD
+node src/cli/index.js crypto BTC-USD
+node src/cli/index.js forensics base
 ```
 
 ## Surfaces
@@ -79,7 +85,7 @@ src/webhooks      signed delivery, SSRF guard, verification
 src/mail          inbound commands, outbound mail
 pipelines/        nightly-forecast, board-pack, pricing-review
 dashboard/        interactive dashboard
-docs/             model, architecture, security, agents, OpenAPI
+docs/             model, architecture, security, agents, quant-pqc-forensics, OpenAPI
 ```
 
 ## Security

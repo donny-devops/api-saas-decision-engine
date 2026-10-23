@@ -7,9 +7,11 @@ import { createInterface } from 'node:readline';
 import {
   runModel, compareScenarios, sensitivity, goalSeek, monteCarlo, evaluatePolicies,
   DEFAULT_ASSUMPTIONS, SCENARIO_PRESETS, KEY_DRIVERS, DEFAULT_POLICIES, METRICS,
+  MARKET_WATCH_UNIVERSE, evaluateEquitySignals, analyzeCryptoTrends, runHybridQuantEngine, runDigitalForensics,
 } from '../engine/index.js';
 import { createAgentSystem } from '../agents/index.js';
 import { loadPipelines, runPipeline } from '../orchestrator/pipelines.js';
+import { PQC_ALGORITHMS, EMBEDDED_PQC_VECTORS, PqcAlgorithmicChain } from '../secrets/pqc.js';
 
 const PROTOCOL_VERSION = '2025-06-18';
 const { mesh, master } = createAgentSystem();
@@ -77,6 +79,26 @@ export const TOOLS = {
       return { status: r.status, durationMs: r.durationMs, tasks: Object.fromEntries(Object.entries(r.tasks).map(([k, t]) => [k, { status: t.status, error: t.error }])), output: r.output };
     },
   },
+  quant_market_watch: {
+    description: 'Run the hybrid algorithmic & quantitative market-watch engine (equities factor signals, crypto trend spotting, SaaS EV/NTM ARR valuation bridge, and treasury allocation).',
+    inputSchema: { type: 'object', properties: { scenario: scenarioSchema, symbol: { type: 'string' }, cryptoSymbol: { type: 'string' }, seed: { type: 'integer' } } },
+    run: ({ scenario, symbol, cryptoSymbol, seed = 1337 }) => ({
+      hybrid: runHybridQuantEngine(runModel(toScenario(scenario)), { seed }),
+      ...(symbol ? { equitySignal: evaluateEquitySignals({ symbol, seed }) } : {}),
+      ...(cryptoSymbol ? { cryptoTrend: analyzeCryptoTrends({ symbol: cryptoSymbol, seed }) } : {}),
+    }),
+  },
+  forensics_pqc_audit: {
+    description: 'Run Benford first-digit forensics, Z-score anomaly detection, digital transformation maturity scoring, and PQC algorithmic chain attestation (ML-KEM-768 + ML-DSA-65).',
+    inputSchema: { type: 'object', properties: { scenario: scenarioSchema } },
+    run: ({ scenario }) => {
+      const r = runModel(toScenario(scenario));
+      const forensics = runDigitalForensics(r);
+      const chain = new PqcAlgorithmicChain();
+      const block = chain.append('mcp.forensics.audit', { scenario: r.summary.scenario, maturity: forensics.digitalTransformation.maturityIndex });
+      return { ...forensics, pqcChain: { algorithms: PQC_ALGORITHMS, blockHash: block.blockHash, verification: chain.verifyChain() } };
+    },
+  },
 };
 
 const RESOURCES = {
@@ -85,6 +107,8 @@ const RESOURCES = {
   'model://drivers': { name: 'Key drivers', mimeType: 'application/json', read: () => KEY_DRIVERS },
   'model://policies/default': { name: 'Default policy ruleset', mimeType: 'application/json', read: () => DEFAULT_POLICIES },
   'model://agents': { name: 'Agent mesh directory', mimeType: 'application/json', read: () => mesh.list() },
+  'model://market-watch/universe': { name: 'Equities, crypto & macro benchmark universe', mimeType: 'application/json', read: () => MARKET_WATCH_UNIVERSE },
+  'model://security/pqc-vectors': { name: 'PQC algorithmic suite & embedded NIST FIPS 203/204/205 vectors', mimeType: 'application/json', read: () => ({ algorithms: PQC_ALGORITHMS, vectors: EMBEDDED_PQC_VECTORS }) },
 };
 
 export async function handleMessage(msg) {

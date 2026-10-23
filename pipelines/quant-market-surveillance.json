@@ -1,0 +1,44 @@
+{
+  "name": "quant-market-surveillance",
+  "description": "Hybrid algorithmic market watch: SaaS EV/ARR valuation bridge, equity factor signals, crypto trend spotting, Benford digital forensics, and PQC chain attestation.",
+  "schedule": "30 6 * * 1-5",
+  "tasks": [
+    {
+      "id": "hybrid",
+      "uses": "quant.hybrid",
+      "with": { "scenario": "base", "seed": 1337 }
+    },
+    {
+      "id": "equity",
+      "uses": "quant.equitySignal",
+      "with": { "symbol": "CLWD", "seed": 1337 }
+    },
+    {
+      "id": "crypto",
+      "uses": "quant.cryptoTrend",
+      "with": { "symbol": "BTC-USD", "seed": 2026 }
+    },
+    {
+      "id": "forensics",
+      "uses": "forensics.audit",
+      "needs": ["hybrid"],
+      "with": { "scenario": "base" }
+    },
+    {
+      "id": "advice",
+      "uses": "agent.ask",
+      "needs": ["hybrid", "equity", "crypto", "forensics"],
+      "with": {
+        "question": "Evaluate our quant valuation multiple, crypto treasury carry, and PQC digital forensics posture.",
+        "scenario": "base"
+      }
+    }
+  ],
+  "output": {
+    "valuationBridge": "${{ tasks.hybrid.output.saasValuationBridge }}",
+    "equitySignal": "${{ tasks.equity.output }}",
+    "cryptoTrend": "${{ tasks.crypto.output }}",
+    "forensics": "${{ tasks.forensics.output }}",
+    "recommendations": "${{ tasks.advice.output.recommendations }}"
+  }
+}

@@ -20,6 +20,8 @@ tags:
   - { name: Agents, description: Master agent, agent mesh, A2A and commerce }
   - { name: Admin, description: API keys and webhooks }
   - { name: Hooks, description: Inbound webhooks and mailhooks }
+  - { name: Quant, description: Algorithmic trading, crypto trend spotting, market watch & hybrid valuation }
+  - { name: Forensics, description: Benford's Law digital forensics & PQC algorithmic chain attestation }
   - { name: Public, description: Unauthenticated endpoints }
 
 paths:
@@ -191,7 +193,7 @@ paths:
     post:
       tags: [Orchestration]
       summary: Start a pipeline asynchronously (write scope)
-      parameters: [{ name: name, in: path, required: true, schema: { type: string, enum: [nightly-forecast, board-pack, pricing-review] } }]
+      parameters: [{ name: name, in: path, required: true, schema: { type: string, enum: [nightly-forecast, board-pack, pricing-review, quant-market-surveillance] } }]
       requestBody:
         content: { application/json: { schema: { type: object, properties: { input: { type: object } } } } }
       responses:
@@ -320,6 +322,48 @@ paths:
       security: [{ githubSignature: [] }]
       summary: GitHub webhook — a push to the default branch triggers nightly-forecast
       responses: { '202': { description: Triggered or ignored }, '401': { description: Bad signature } }
+
+  /v1/quant/market-watch:
+    get:
+      tags: [Quant]
+      summary: Live equity signals, crypto trend spotting, and SaaS valuation multiples
+      parameters:
+        - { name: days, in: query, schema: { type: integer, default: 120 } }
+        - { name: seed, in: query, schema: { type: integer, default: 1337 } }
+      responses: { '200': { description: Market watch snapshot } }
+  /v1/quant/hybrid:
+    post:
+      tags: [Quant]
+      summary: Fuse SaaS operating metrics with public market multiples and treasury optimization
+      requestBody:
+        content: { application/json: { schema: { type: object, properties: { scenario: { $ref: '#/components/schemas/ScenarioRef' }, seed: { type: integer, default: 1337 } } } } }
+      responses: { '200': { description: Hybrid quant valuation bridge } }
+  /v1/quant/signals:
+    post:
+      tags: [Quant]
+      summary: Evaluate algorithmic trading signal or crypto trend for a specific symbol
+      requestBody:
+        content: { application/json: { schema: { type: object, properties: { symbol: { type: string }, assetClass: { type: string, enum: [equity, crypto] }, days: { type: integer, default: 120 }, seed: { type: integer, default: 1337 } } } } }
+      responses: { '200': { description: Signal and risk metrics } }
+  /v1/forensics/audit:
+    post:
+      tags: [Forensics]
+      summary: Run Benford's Law χ² audit, Z-score anomaly scan, and PQC chain attestation
+      requestBody:
+        content: { application/json: { schema: { type: object, properties: { scenario: { $ref: '#/components/schemas/ScenarioRef' } } } } }
+      responses: { '200': { description: Forensic audit and PQC attestation block } }
+  /v1/security/pqc:
+    get:
+      tags: [Forensics]
+      summary: Inspect PQC algorithms (FIPS 203/204/205), KAT vectors, and chain verification status
+      responses: { '200': { description: PQC posture and chain verification } }
+  /v1/security/pqc/attest:
+    post:
+      tags: [Forensics]
+      summary: Append a dual-signed (Ed25519 + ML-DSA-65) block to the PQC algorithmic chain (write scope)
+      requestBody:
+        content: { application/json: { schema: { type: object, required: [payload], properties: { eventType: { type: string }, payload: { type: object } } } } }
+      responses: { '201': { description: Attested block and chain verification } }
 
 webhooks:
   modelRunCompleted:

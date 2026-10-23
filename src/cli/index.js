@@ -10,9 +10,11 @@
 //   pipelines                            list pipelines
 import {
   runModel, compareScenarios, sensitivity, goalSeek, monteCarlo, evaluatePolicies, toCsv,
+  evaluateEquitySignals, analyzeCryptoTrends, runHybridQuantEngine, runDigitalForensics,
 } from '../engine/index.js';
 import { createAgentSystem } from '../agents/index.js';
 import { loadPipelines, runPipeline } from '../orchestrator/pipelines.js';
+import { PqcAlgorithmicChain, PQC_ALGORITHMS } from '../secrets/pqc.js';
 
 const args = process.argv.slice(2);
 const flags = {};
@@ -71,6 +73,23 @@ async function main() {
     }
     case 'pipelines':
       return console.table(Object.values(loadPipelines()).map((p) => ({ name: p.name, schedule: p.schedule ?? '—', tasks: p.tasks.length, description: p.description })));
+    case 'quant': {
+      const r = runModel(scen(rest[0]));
+      return out(runHybridQuantEngine(r, { seed: Number(flags.seed ?? 1337) }));
+    }
+    case 'crypto': {
+      return out(analyzeCryptoTrends({ symbol: rest[0] ?? 'BTC-USD', seed: Number(flags.seed ?? 2026) }));
+    }
+    case 'stocks': {
+      return out(evaluateEquitySignals({ symbol: rest[0] ?? 'CLWD', seed: Number(flags.seed ?? 1337) }));
+    }
+    case 'forensics': {
+      const r = runModel(scen(rest[0]));
+      const forensics = runDigitalForensics(r);
+      const chain = new PqcAlgorithmicChain();
+      const block = chain.append('cli.forensics.audit', { scenario: r.summary.scenario, maturity: forensics.digitalTransformation.maturityIndex });
+      return out({ ...forensics, pqcAttestation: { algorithms: PQC_ALGORITHMS, blockHash: block.blockHash, verified: chain.verifyChain().valid } });
+    }
     case 'pipeline': {
       const def = loadPipelines()[rest[0]];
       if (!def) throw new Error(`Unknown pipeline "${rest[0]}"`);

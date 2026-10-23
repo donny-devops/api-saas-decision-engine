@@ -2,8 +2,10 @@
 // `async (input, ctx) => output`; ctx carries db, webhooks, mesh, master agent.
 import {
   runModel, compareScenarios, sensitivity, monteCarlo, goalSeek, evaluatePolicies, toCsv, DEFAULT_POLICIES,
+  evaluateEquitySignals, analyzeCryptoTrends, runHybridQuantEngine, runDigitalForensics,
 } from '../engine/index.js';
 import { getSecret } from '../secrets/index.js';
+import { PqcAlgorithmicChain, PQC_ALGORITHMS } from '../secrets/pqc.js';
 
 const fmt$ = (v) => (v == null ? 'n/a' : `$${(v / 1e6).toFixed(2)}M`);
 const pct = (v) => (v == null ? 'n/a' : `${(v * 100).toFixed(1)}%`);
@@ -28,6 +30,16 @@ export const TASKS = {
   },
   'model.goalSeek': async (input, ctx) => goalSeek(input.scenario ?? {}, { ...input, lookup: ctx.lookup }),
   'model.exportCsv': async ({ scenario = {} }, ctx) => ({ csv: toCsv(runModel(scenario, { lookup: ctx.lookup })) }),
+  'quant.equitySignal': async ({ symbol = 'CLWD', seed = 1337 }) => evaluateEquitySignals({ symbol, seed }),
+  'quant.cryptoTrend': async ({ symbol = 'BTC-USD', seed = 2026 }) => analyzeCryptoTrends({ symbol, seed }),
+  'quant.hybrid': async ({ scenario = {}, seed = 1337 }, ctx) => runHybridQuantEngine(runModel(scenario, { lookup: ctx.lookup }), { seed }),
+  'forensics.audit': async ({ scenario = {} }, ctx) => {
+    const r = runModel(scenario, { lookup: ctx.lookup });
+    const forensics = runDigitalForensics(r);
+    const chain = new PqcAlgorithmicChain();
+    const block = chain.append('pipeline.forensics.audit', { scenario: r.summary.scenario, maturity: forensics.digitalTransformation.maturityIndex });
+    return { ...forensics, pqcChain: { algorithms: PQC_ALGORITHMS, blockHash: block.blockHash, verified: chain.verifyChain().valid } };
+  },
 
   'agent.ask': async ({ question, scenario }, ctx) => ctx.master.ask(question, { scenario }),
   'agent.call': async ({ agent, skill, input }, ctx) => ctx.mesh.call(agent, skill, input, { caller: 'pipeline' }),

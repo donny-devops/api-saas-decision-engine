@@ -4,3 +4,17 @@ export { validateAssumptions, ModelValidationError } from './validate.js';
 export { compareScenarios, sensitivity, goalSeek, monteCarlo, shock, METRICS } from './analysis.js';
 export { evaluatePolicies, DEFAULT_POLICIES } from './policies.js';
 export { toCsv } from './export.js';
+export {
+  MARKET_WATCH_UNIVERSE,
+  generatePriceSeries,
+  ema,
+  rsi,
+  macd,
+  bollingerBands,
+  hurstExponent,
+  computeQuantRiskMetrics,
+  evaluateEquitySignals,
+  analyzeCryptoTrends,
+  runHybridQuantEngine,
+  runDigitalForensics,
+} from './quant.js';

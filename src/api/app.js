@@ -5,10 +5,12 @@ import { fileURLToPath } from 'node:url';
 import {
   runModel, compareScenarios, sensitivity, goalSeek, monteCarlo, evaluatePolicies, toCsv,
   DEFAULT_ASSUMPTIONS, SCENARIO_PRESETS, KEY_DRIVERS, DEFAULT_POLICIES, METRICS,
+  MARKET_WATCH_UNIVERSE, evaluateEquitySignals, analyzeCryptoTrends, runHybridQuantEngine, runDigitalForensics,
 } from '../engine/index.js';
 import { json, parse } from '../db/index.js';
 import { getSecret, redact } from '../secrets/index.js';
 import { safeEqual } from '../secrets/crypto.js';
+import { PQC_ALGORITHMS, EMBEDDED_PQC_VECTORS, PqcAlgorithmicChain, generateHybridKeyring, hybridSign, hybridVerify } from '../secrets/pqc.js';
 import { WebhookService, verifyGithubSignature } from '../webhooks/index.js';
 import { parseCommand, isAllowedSender, sendMail } from '../mail/index.js';
 import { createAgentSystem } from '../agents/index.js';
@@ -88,6 +90,45 @@ export function createApp({ db, fetchImpl, pipelines = loadPipelines(), limiter 
     type: 'text/csv; charset=utf-8',
     headers: { 'content-disposition': `attachment; filename="${(query.get('scenario') ?? 'base').replace(/[^\w-]/g, '')}.csv"` },
   }));
+
+  // ── Quant, Market Watch, Crypto Trends, Digital Forensics & PQC ───
+  const pqcChain = new PqcAlgorithmicChain();
+  route('GET', '/v1/quant/market-watch', 'read', ({ query }) => ({
+    universe: MARKET_WATCH_UNIVERSE,
+    equities: MARKET_WATCH_UNIVERSE.equities.map((e) => evaluateEquitySignals({ symbol: e.symbol, seed: Number(query.get('seed') ?? 1337) })),
+    crypto: MARKET_WATCH_UNIVERSE.crypto.map((c) => analyzeCryptoTrends({ symbol: c.symbol, seed: Number(query.get('seed') ?? 2026) })),
+  }));
+  route('POST', '/v1/quant/hybrid', 'read', ({ body }) => {
+    const r = runModel(resolveScenario(body.scenario), { lookup });
+    return runHybridQuantEngine(r, { seed: body.seed ?? 1337 });
+  });
+  route('POST', '/v1/quant/signals', 'read', ({ body }) => ({
+    equity: evaluateEquitySignals({ symbol: body.symbol ?? 'CLWD', prices: body.prices, seed: body.seed ?? 1337 }),
+    crypto: analyzeCryptoTrends({ symbol: body.cryptoSymbol ?? 'BTC-USD', prices: body.cryptoPrices, seed: body.seed ?? 2026 }),
+  }));
+  route('POST', '/v1/forensics/audit', 'read', ({ body }) => {
+    const r = runModel(resolveScenario(body.scenario), { lookup });
+    const ledger = db.prepare('SELECT delta FROM ledger ORDER BY id DESC LIMIT 500').all();
+    const forensics = runDigitalForensics(r, ledger);
+    const block = pqcChain.append('api.forensics.audit', {
+      scenario: r.summary.scenario,
+      conformityStatus: forensics.benfordAnalysis.conformityStatus,
+      maturityIndex: forensics.digitalTransformation.maturityIndex,
+    });
+    return { ...forensics, pqcBlock: block, chainVerification: pqcChain.verifyChain() };
+  });
+  route('GET', '/v1/security/pqc', null, () => ({
+    algorithms: PQC_ALGORITHMS,
+    vectors: EMBEDDED_PQC_VECTORS,
+    chainStatus: pqcChain.verifyChain(),
+  }));
+  route('POST', '/v1/security/pqc/attest', 'write', ({ body }) => {
+    const keyring = generateHybridKeyring();
+    const sig = hybridSign(body.payload ?? {}, keyring);
+    const verified = hybridVerify(body.payload ?? {}, sig, keyring);
+    const block = pqcChain.append(body.eventType ?? 'pqc.attestation', { keyId: keyring.id, digestHex: sig.digestHex, verified });
+    return { status: 201, body: { keyId: keyring.id, signature: sig, verified, chainBlock: block, chainStatus: pqcChain.verifyChain() } };
+  });
 
   // ── Scenarios (nested via `extends`) ──────────────────────────────
   route('GET', '/v1/scenarios', 'read', () => ({

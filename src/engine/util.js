@@ -77,6 +77,8 @@ export function addMonths(yyyyMm, n) {
 }
 
 export const sum = (xs) => xs.reduce((a, b) => a + b, 0);
+export const mean = (xs) => (xs.length ? sum(xs) / xs.length : 0);
+export const clamp = (v, min, max) => Math.min(Math.max(v, min), max);
 export const round = (v, dp = 2) => (Number.isFinite(v) ? Math.round(v * 10 ** dp) / 10 ** dp : v);
 export const safeDiv = (a, b) => (b === 0 || !Number.isFinite(b) ? null : a / b);
 
