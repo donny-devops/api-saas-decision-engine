@@ -11,10 +11,16 @@ export const EVENTS = [
   'pipeline.completed', 'pipeline.failed', 'a2a.task.completed', 'commerce.settled',
 ];
 
-const PRIVATE_HOST = /^(localhost|.*\.local|.*\.internal)$/i;
+const PRIVATE_HOST = /^(localhost|.*\.local|.*\.internal|metadata\.google\.internal)$/i;
 function isPrivateIp(host) {
   if (!isIP(host)) return false;
-  return /^(10\.|127\.|169\.254\.|192\.168\.|172\.(1[6-9]|2\d|3[01])\.|0\.)/.test(host) || host === '::1' || /^f[cd]/i.test(host);
+  // IPv4 private, loopback, link-local, metadata
+  if (/^(10\.|127\.|169\.254\.|192\.168\.|172\.(1[6-9]|2\d|3[01])\.|0\.|100\.64\.)/.test(host)) return true;
+  // IPv6 loopback, unique local, link-local, documentation, multicast
+  if (host === '::1' || /^f[cd]/i.test(host) || /^fe80:/i.test(host) || /^::ffff:0?:?0?:?0?:?0?:?0?:?0?:?0?$/i.test(host)) return true;
+  // AWS/GCP/Azure metadata ranges commonly used in SSRF
+  if (host === '169.254.169.254' || host === 'fd00:ec2::254') return true;
+  return false;
 }
 
 /** Basic SSRF guard for admin-registered URLs. Set ALLOW_PRIVATE_WEBHOOKS=true for local testing. */
@@ -24,7 +30,7 @@ export function assertSafeUrl(raw) {
   if (!['https:', 'http:'].includes(u.protocol)) throw Object.assign(new Error('Webhook URL must be http(s)'), { status: 400 });
   const host = u.hostname.replace(/^\[|\]$/g, '');
   if (process.env.ALLOW_PRIVATE_WEBHOOKS !== 'true' && (PRIVATE_HOST.test(host) || isPrivateIp(host))) {
-    throw Object.assign(new Error('Webhook URL points at a private address'), { status: 400 });
+    throw Object.assign(new Error('Webhook URL points at a private or metadata address'), { status: 400 });
   }
   if (process.env.NODE_ENV === 'production' && u.protocol !== 'https:') throw Object.assign(new Error('Webhook URL must be https in production'), { status: 400 });
   return u.toString();
