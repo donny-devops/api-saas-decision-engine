@@ -2,7 +2,7 @@
 // stored. Scopes: read < write < admin. ADMIN_API_KEY from the secrets manager
 // acts as a bootstrap admin key.
 import { getSecret } from '../secrets/index.js';
-import { randomToken, safeEqual, sha256 } from '../secrets/crypto.js';
+import { hashCredential, randomToken, safeEqual, verifyCredential } from '../secrets/crypto.js';
 
 export const SCOPES = ['read', 'write', 'admin'];
 const rank = (s) => SCOPES.indexOf(s);
@@ -11,7 +11,7 @@ export function createApiKey(db, { name, scope = 'read', env = 'live' }) {
   if (!SCOPES.includes(scope)) throw Object.assign(new Error(`scope must be one of ${SCOPES.join(', ')}`), { status: 400 });
   if (!name) throw Object.assign(new Error('name is required'), { status: 400 });
   const key = randomToken(`sde_${env}_`, 24);
-  const { lastInsertRowid } = db.prepare('INSERT INTO api_keys (name, prefix, key_hash, scopes) VALUES (?, ?, ?, ?)').run(name, key.slice(0, 13), sha256(key), scope);
+  const { lastInsertRowid } = db.prepare('INSERT INTO api_keys (name, prefix, key_hash, scopes) VALUES (?, ?, ?, ?)').run(name, key.slice(0, 13), hashCredential(key), scope);
   return { id: Number(lastInsertRowid), name, scope, key }; // plaintext returned once
 }
 
@@ -30,7 +30,8 @@ export async function authenticate(db, header) {
   const token = m[1];
   const admin = await getSecret('ADMIN_API_KEY');
   if (admin && safeEqual(token, admin)) return { id: 'bootstrap-admin', name: 'bootstrap-admin', scope: 'admin', account: 'admin' };
-  const row = db.prepare('SELECT id, name, scopes FROM api_keys WHERE key_hash = ? AND revoked_at IS NULL').get(sha256(token));
+  const rows = db.prepare('SELECT id, name, scopes, key_hash FROM api_keys WHERE revoked_at IS NULL').all();
+  const row = rows.find((r) => verifyCredential(token, r.key_hash));
   return row ? { id: row.id, name: row.name, scope: row.scopes, account: `key_${row.id}` } : null;
 }
 
