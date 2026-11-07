@@ -22,12 +22,20 @@ Custom backends (AWS Secrets Manager, GCP Secret Manager, 1Password Connect) plu
 | `GITHUB_WEBHOOK_SECRET` | Verifies `X-Hub-Signature-256` |
 | `SLACK_WEBHOOK_URL`, `RESEND_API_KEY` | Outbound notifications |
 
+### Credential hashing
+
+API keys and similar credentials are stored with scrypt (`N=65536`, `r=8`, `p=1`). Existing hashes created with the previous cost factor remain verifiable. New hashes use the higher cost. The verification path rejects inflated parameters (`N > 131072` or `r`/`p` > 64) to prevent denial-of-service.
+
 ### Rotation
 
-- **API keys:** create a new key (`POST /v1/api-keys`), roll clients over, then `DELETE` the old key.
+- **API keys:** create a new key (`POST /v1/api-keys`), roll clients over, then `DELETE` the old key. The prefix-based lookup remains valid across rotations.
 - **Webhook secrets:** register a new endpoint, verify deliveries, then delete the old one.
-- **`DATA_ENCRYPTION_KEY`:** ciphertexts are versioned (`v1.`). Re-register the webhooks after
-  changing the key.
+- **`DATA_ENCRYPTION_KEY`:**
+  1. Generate a new 32-byte base64 key and stage it in the secrets manager under a temporary name if desired.
+  2. Update the secret value (or switch providers).
+  3. Ciphertexts are versioned (`v1.`). After the key change, re-encrypt any stored secrets (webhook signing secrets, etc.) by reading with the old key (if still available) or by re-registering the affected resources.
+  4. Restart the service so all processes pick up the new key. No downtime is required if you keep the old key available briefly for decryption only.
+  5. Confirm successful decryption of existing records before retiring the previous key.
 
 ## Secret scanning
 
@@ -50,6 +58,15 @@ function verify(secret, rawBody, header) {
   return v1.length === expected.length && timingSafeEqual(Buffer.from(v1), Buffer.from(expected));
 }
 ```
+
+## Audit logging
+
+Minimal structured audit events are emitted for:
+- Authentication success and failure (API key and bootstrap admin)
+- Secret retrievals that fail or are required
+- API key creation and revocation
+
+Events are logged via `console` in JSON form (suitable for container log aggregation). No secret values are included.
 
 ## Repository rulesets
 
