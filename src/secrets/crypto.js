@@ -39,7 +39,9 @@ export const sha256 = (s) => createHash('sha256').update(s).digest('hex');
 export const hmac = (secret, payload) => createHmac('sha256', secret).update(payload).digest('hex');
 export const randomToken = (prefix, bytes = 24) => `${prefix}${randomBytes(bytes).toString('base64url')}`;
 
-const SCRYPT_N = 16384;
+// Raised from 16384 to 65536 for stronger resistance to offline attacks.
+// Existing hashes remain verifiable; new hashes use the higher cost.
+const SCRYPT_N = 65536;
 const SCRYPT_R = 8;
 const SCRYPT_P = 1;
 const SCRYPT_KEYLEN = 32;
@@ -58,6 +60,7 @@ export function verifyCredential(secret, stored) {
   const r = Number(rRaw);
   const p = Number(pRaw);
   if (!Number.isInteger(N) || !Number.isInteger(r) || !Number.isInteger(p)) return false;
+  if (N > 131072 || r > 64 || p > 64) return false; // guard against DoS via inflated params
   const salt = Buffer.from(saltB64, 'base64');
   const expected = Buffer.from(hashB64, 'base64');
   const actual = scryptSync(String(secret), salt, expected.length, { N, r, p });
