@@ -3,7 +3,7 @@ import { readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import {
-  runModel, compareScenarios, sensitivity, goalSeek, monteCarlo, evaluatePolicies, toCsv,
+  runModel, compareScenarios, sensitivity, goalSeek, monteCarlo, evaluatePolicies, toCsv, analyzePricing,
   DEFAULT_ASSUMPTIONS, SCENARIO_PRESETS, KEY_DRIVERS, DEFAULT_POLICIES, METRICS,
   MARKET_WATCH_UNIVERSE, evaluateEquitySignals, analyzeCryptoTrends, runHybridQuantEngine, runDigitalForensics,
 } from '../engine/index.js';
@@ -85,6 +85,7 @@ export function createApp({ db, fetchImpl, pipelines = loadPipelines(), limiter 
   route('POST', '/v1/model/sensitivity', 'read', ({ body }) => sensitivity(resolveScenario(body.scenario), { target: body.target, delta: body.delta, lookup }));
   route('POST', '/v1/model/goal-seek', 'read', ({ body }) => goalSeek(resolveScenario(body.scenario), { ...body, scenario: undefined, lookup }));
   route('POST', '/v1/model/monte-carlo', 'read', ({ body }) => monteCarlo(resolveScenario(body.scenario), { iterations: body.iterations, seed: body.seed, lookup }));
+  route('POST', '/v1/decision-packs/pricing', 'read', ({ body }) => analyzePricing(body));
   route('GET', '/v1/model/export.csv', 'read', ({ query }) => ({
     raw: toCsv(runModel(resolveScenario(query.get('scenario') ?? 'base'), { lookup })),
     type: 'text/csv; charset=utf-8',
