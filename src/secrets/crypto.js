@@ -58,6 +58,7 @@ export function verifyCredential(secret, stored) {
   const r = Number(rRaw);
   const p = Number(pRaw);
   if (!Number.isInteger(N) || !Number.isInteger(r) || !Number.isInteger(p)) return false;
+  if (N > 131072 || r > 64 || p > 64) return false; // guard against DoS via inflated params
   const salt = Buffer.from(saltB64, 'base64');
   const expected = Buffer.from(hashB64, 'base64');
   const actual = scryptSync(String(secret), salt, expected.length, { N, r, p });

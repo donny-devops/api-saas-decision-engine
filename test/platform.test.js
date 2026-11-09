@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { openDb } from '../src/db/index.js';
-import { encrypt, decrypt } from '../src/secrets/crypto.js';
+import { encrypt, decrypt, hashCredential, verifyCredential } from '../src/secrets/crypto.js';
 import { getSecret, redact, clearSecretCache, registerSecretProvider } from '../src/secrets/index.js';
 import { WebhookService, signPayload, verifySignature, assertSafeUrl } from '../src/webhooks/index.js';
 import { parseCommand } from '../src/mail/index.js';
@@ -18,6 +18,16 @@ test('AES-GCM round-trips and detects tampering', async () => {
   const parts = c.split('.');
   parts[3] = Buffer.from('tampered').toString('base64');
   await assert.rejects(() => decrypt(parts.join('.')));
+});
+
+test('credential verification rejects oversized scrypt parameters', () => {
+  const stored = hashCredential('credential').split('$');
+  assert.equal(verifyCredential('credential', stored.join('$')), true);
+  for (const [index, value] of [[1, '131073'], [2, '65'], [3, '65']]) {
+    const malformed = [...stored];
+    malformed[index] = value;
+    assert.equal(verifyCredential('credential', malformed.join('$')), false);
+  }
 });
 
 test('secrets manager walks providers in order', async () => {
