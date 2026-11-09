@@ -120,6 +120,30 @@ paths:
         content: { application/json: { schema: { type: object, properties: { scenario: { $ref: '#/components/schemas/ScenarioRef' }, iterations: { type: integer, maximum: 5000, default: 500 }, seed: { type: integer, default: 42 } } } } }
       responses:
         '200': { description: Distribution, content: { application/json: { schema: { type: object } } } }
+  /v1/decision-packs/pricing:
+    post:
+      tags: [Model]
+      summary: Analyze a proposed price increase for a single monthly cohort (read scope)
+      description: |
+        Stateless calculation; no decisions or inputs are stored. Prices and costs use the
+        supplied currency per customer per month. Churn is incremental relative to a
+        no-churn baseline. Proposed price must exceed current price, cost must be below
+        current price, and stress churn must be at least expected churn.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/PricingInput' }
+      responses:
+        '200':
+          description: Deterministic cohort analysis
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/PricingResult' }
+        '400': { description: Invalid JSON }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '422': { $ref: '#/components/responses/Invalid' }
+        '429': { description: Rate limit exceeded }
   /v1/model/export.csv:
     get:
       tags: [Model]
@@ -397,6 +421,56 @@ components:
       description: Assumptions failed validation
       content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } }
   schemas:
+    PricingInput:
+      type: object
+      additionalProperties: false
+      required: [currency, customers, currentPrice, proposedPrice, costPerCustomer, expectedChurn, stressChurn, maxChurn]
+      properties:
+        currency: { type: string, pattern: '^[A-Z]{3}$', description: Caller-supplied currency code }
+        customers: { type: integer, minimum: 1, maximum: 10000000 }
+        currentPrice: { type: number, minimum: 0.01, maximum: 1000000000 }
+        proposedPrice: { type: number, minimum: 0.01, maximum: 1000000000 }
+        costPerCustomer: { type: number, minimum: 0, maximum: 1000000000 }
+        expectedChurn: { type: number, minimum: 0, maximum: 1 }
+        stressChurn: { type: number, minimum: 0, maximum: 1 }
+        maxChurn: { type: number, minimum: 0, maximum: 1 }
+    PricingResult:
+      type: object
+      additionalProperties: false
+      required: [version, currency, period, assumptions, baseline, expected, stress, breakEvenChurn, recommendation, rationale, warnings]
+      properties:
+        version: { const: '1.0' }
+        currency: { type: string }
+        period: { const: month }
+        assumptions: { $ref: '#/components/schemas/PricingInput' }
+        baseline:
+          type: object
+          additionalProperties: false
+          required: [customers, revenue, cost, contribution, grossMargin]
+          properties:
+            customers: { type: integer }
+            revenue: { type: number }
+            cost: { type: number }
+            contribution: { type: number }
+            grossMargin: { type: number }
+        expected: { $ref: '#/components/schemas/PricingScenario' }
+        stress: { $ref: '#/components/schemas/PricingScenario' }
+        breakEvenChurn: { type: number, description: Incremental churn at which contribution equals the baseline }
+        recommendation: { type: string, enum: [test, hold] }
+        rationale: { type: string }
+        warnings: { type: array, items: { type: string } }
+    PricingScenario:
+      type: object
+      additionalProperties: false
+      required: [churn, retainedCustomers, revenue, cost, contribution, grossMargin, contributionChange]
+      properties:
+        churn: { type: number }
+        retainedCustomers: { type: number }
+        revenue: { type: number }
+        cost: { type: number }
+        contribution: { type: number }
+        grossMargin: { type: [number, 'null'] }
+        contributionChange: { type: number }
     Error:
       type: object
       properties:

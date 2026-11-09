@@ -8,10 +8,10 @@ scalability month by month, and wraps the model in the tools a team needs to use
 - a CLI
 - an interactive dashboard
 - policy guardrails
+- a stateless pricing cohort analysis with caller-supplied churn guardrails
 - pipelines on an async DAG engine
 - a master agent that coordinates specialist agents over A2A
 - post-quantum cryptography (PQC) hybrid chains (`ML-KEM-768` + `X25519`, `ML-DSA-65` + `Ed25519`)
-- quantitative equity trading signals, cryptocurrency trend spotting, market watch & Benford digital forensics
 
 It has **zero npm dependencies**. It needs Node ≥ 22.5 and nothing else.
 
@@ -36,6 +36,11 @@ Outputs include MRR bridge, ARR, NRR/GRR, CAC, LTV, payback, burn multiple, magi
 Rule of 40, cost and revenue per 1k API calls, fleet utilisation and runway. The full driver
 tree is in [docs/model.md](docs/model.md).
 
+`POST /v1/decision-packs/pricing` compares a proposed monthly price increase against a
+baseline using explicit customer count, cost, expected and stress churn, and a churn
+guardrail. It does not store a decision or predict churn. See
+[docs/model.md](docs/model.md) and [docs/openapi.yaml](docs/openapi.yaml).
+
 ```bash
 node src/cli/index.js run bull
 node src/cli/index.js compare base,bull,bear,efficiency
@@ -44,10 +49,6 @@ node src/cli/index.js goal-seek acquisition.paidMarketingSpend 30000000
 node src/cli/index.js monte-carlo base --iterations 1000
 node src/cli/index.js ask "Should we raise prices, and how long is our runway?"
 node src/cli/index.js pipeline nightly-forecast
-node src/cli/index.js quant base
-node src/cli/index.js stocks CLWD
-node src/cli/index.js crypto BTC-USD
-node src/cli/index.js forensics base
 ```
 
 ## Surfaces
@@ -102,4 +103,6 @@ docker compose up --build             # API + scheduler with Docker secrets
 ## Limitations
 
 This is a planning model, not accounting or investment advice. Price changes carry no modelled
-churn response. Overage uses tier-average usage. Enterprise churn is applied monthly.
+churn response in the driver-based forecast; the separate pricing pack uses caller-supplied
+churn. Overage uses tier-average usage. Enterprise churn is applied monthly. The existing
+API and stored resources are not tenant-isolated and do not implement a decision lifecycle.
