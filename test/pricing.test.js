@@ -36,7 +36,7 @@ test('pricing analysis rejects absent, nonfinite, unsupported and injection-shap
     { ...input, expectedChurn: -1 }, { ...input, stressChurn: 0.01 },
     { ...input, proposedPrice: 99 }, { ...input, costPerCustomer: 100 },
     { ...input, currency: 'usd' }, { ...input, extra: 'x' },
-    JSON.parse('{"__proto__":{"polluted":true}}'),
+    { ...input, ...JSON.parse('{"__proto__":{"polluted":true}}') },
   ]) assert.throws(() => analyzePricing(invalid), { status: 422 });
   assert.equal({}.polluted, undefined);
 });
