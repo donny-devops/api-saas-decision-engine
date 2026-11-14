@@ -23,8 +23,8 @@ jobs:
     runs-on: ubuntu-latest
     environment: forecasting
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
         with:
           node-version: 24
       - name: Run nightly-forecast pipeline and post digest
@@ -36,7 +36,7 @@ jobs:
       - name: Publish report to job summary
         if: always()
         run: cat exports/nightly-forecast.md >> "$GITHUB_STEP_SUMMARY"
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         if: always()
         with:
           name: nightly-forecast
