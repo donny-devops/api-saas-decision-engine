@@ -1,0 +1,9 @@
+{
+  "name": "credit-portfolio-review",
+  "description": "Nightly re-evaluation of every business-credit client: re-routes journey stages and fires credit.stage.changed / credit.funding.matched automations.",
+  "schedule": "30 6 * * *",
+  "output": "review",
+  "tasks": [
+    { "id": "review", "uses": "credit.reevaluateAll", "with": { "limit": 500 } }
+  ]
+}

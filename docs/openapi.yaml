@@ -22,6 +22,7 @@ tags:
   - { name: Hooks, description: Inbound webhooks and mailhooks }
   - { name: Quant, description: Algorithmic trading, crypto trend spotting, market watch & hybrid valuation }
   - { name: Forensics, description: Benford's Law digital forensics & PQC algorithmic chain attestation }
+  - { name: Credit, description: Business credit platform — intake, documents, foundation, credit tracking, builder, funding match, strategy }
   - { name: Public, description: Unauthenticated endpoints }
 
 paths:
@@ -365,6 +366,174 @@ paths:
         content: { application/json: { schema: { type: object, required: [payload], properties: { eventType: { type: string }, payload: { type: object } } } } }
       responses: { '201': { description: Attested block and chain verification } }
 
+  /v1/credit/catalog:
+    get:
+      tags: [Credit]
+      summary: Journey stages, foundation checklist, builder tiers, funding products, document types and disclaimer
+      responses: { '200': { description: Catalog } }
+  /v1/credit/intake/extract:
+    post:
+      tags: [Credit]
+      summary: AI-assisted intake — extract and validate business/EIN fields from free text (EIN is masked)
+      description: Rule-based extraction with per-field confidence; optionally refined by the model at `INTAKE_AI_ENDPOINT`.
+      requestBody:
+        content: { application/json: { schema: { type: object, required: [text], properties: { text: { type: string } } } } }
+      responses: { '200': { description: Extracted fields, confidence and validation } }
+  /v1/credit/clients:
+    get:
+      tags: [Credit]
+      summary: List credit clients for the caller's account (admin keys see all)
+      parameters:
+        - { name: stage, in: query, schema: { $ref: '#/components/schemas/JourneyStage' } }
+        - { name: limit, in: query, schema: { type: integer } }
+      responses: { '200': { description: OK } }
+    post:
+      tags: [Credit]
+      summary: Create a client from structured fields or `intakeText`; runs the first evaluation
+      description: EIN is stored AES-256-GCM encrypted plus a keyed hash (unique per account). Emits `credit.client.created`.
+      requestBody:
+        content: { application/json: { schema: { $ref: '#/components/schemas/CreditClientInput' } } }
+      responses: { '201': { description: Created }, '400': { description: Validation failed }, '409': { description: EIN already on file } }
+  /v1/credit/clients/{id}:
+    parameters: [{ $ref: '#/components/parameters/ClientId' }]
+    get:
+      tags: [Credit]
+      summary: Client profile with latest evaluation summary
+      responses: { '200': { description: OK }, '404': { description: Not found or other tenant } }
+    put:
+      tags: [Credit]
+      summary: Update profile fields (re-evaluates; may emit `credit.stage.changed`)
+      requestBody:
+        content: { application/json: { schema: { $ref: '#/components/schemas/CreditClientInput' } } }
+      responses: { '200': { description: Updated } }
+  /v1/credit/clients/{id}/documents:
+    parameters: [{ $ref: '#/components/parameters/ClientId' }]
+    get:
+      tags: [Credit]
+      summary: List documents
+      responses: { '200': { description: OK } }
+    post:
+      tags: [Credit]
+      summary: Upload a document (base64 ≤ 700 KB) — auto-classified; emits `credit.document.received`
+      requestBody:
+        content: { application/json: { schema: { type: object, required: [filename], properties: { filename: { type: string }, mimeType: { type: string }, type: { type: string, description: Override classification }, contentBase64: { type: string }, text: { type: string }, documentDate: { type: string, format: date }, expiresAt: { type: string, format: date } } } } }
+      responses: { '201': { description: Created }, '400': { description: Invalid } }
+  /v1/credit/clients/{id}/documents/checklist:
+    parameters: [{ $ref: '#/components/parameters/ClientId' }]
+    get:
+      tags: [Credit]
+      summary: Required-document checklist for this client (depends on entity type, stage and target funding)
+      responses: { '200': { description: OK } }
+  /v1/credit/clients/{id}/documents/{docId}:
+    parameters: [{ $ref: '#/components/parameters/ClientId' }, { name: docId, in: path, required: true, schema: { type: string } }]
+    get:
+      tags: [Credit]
+      summary: Document metadata and status
+      responses: { '200': { description: OK } }
+    put:
+      tags: [Credit]
+      summary: Review a document (status / type / notes); emits `credit.document.reviewed`
+      requestBody:
+        content: { application/json: { schema: { type: object, properties: { status: { type: string, enum: [received, in-review, verified, rejected, expired] }, type: { type: string }, notes: { type: string }, expiresAt: { type: string, format: date } } } } }
+      responses: { '200': { description: Updated } }
+  /v1/credit/clients/{id}/tradelines:
+    parameters: [{ $ref: '#/components/parameters/ClientId' }]
+    get:
+      tags: [Credit]
+      summary: List tradelines
+      responses: { '200': { description: OK } }
+    post:
+      tags: [Credit]
+      summary: Add a tradeline (vendor, store, fleet, fuel, revolving, installment…)
+      requestBody:
+        content: { application/json: { schema: { $ref: '#/components/schemas/Tradeline' } } }
+      responses: { '201': { description: Created } }
+  /v1/credit/clients/{id}/tradelines/{tid}:
+    parameters: [{ $ref: '#/components/parameters/ClientId' }, { name: tid, in: path, required: true, schema: { type: string } }]
+    put:
+      tags: [Credit]
+      summary: Update a tradeline (balance, status, payments; `addPayments` appends)
+      requestBody:
+        content: { application/json: { schema: { $ref: '#/components/schemas/Tradeline' } } }
+      responses: { '200': { description: Updated } }
+  /v1/credit/clients/{id}/evaluate:
+    parameters: [{ $ref: '#/components/parameters/ClientId' }]
+    post:
+      tags: [Credit]
+      summary: Real-time evaluation — foundation, credit profile snapshot, builder plan, decision-engine funding match, journey routing
+      responses: { '200': { description: Evaluation summary } }
+  /v1/credit/clients/{id}/foundation:
+    parameters: [{ $ref: '#/components/parameters/ClientId' }]
+    get:
+      tags: [Credit]
+      summary: Fundable Foundation score, grade, checklist items and next actions
+      responses: { '200': { description: OK } }
+  /v1/credit/clients/{id}/credit-builder:
+    parameters: [{ $ref: '#/components/parameters/ClientId' }]
+    get:
+      tags: [Credit]
+      summary: Tiered Business Credit Builder plan (vendor net-30 → store/fleet/fuel → revolving) with progress
+      responses: { '200': { description: OK } }
+  /v1/credit/clients/{id}/credit-profile:
+    parameters: [{ $ref: '#/components/parameters/ClientId' }]
+    get:
+      tags: [Credit]
+      summary: Current bureau-style profile (heuristic estimates, not bureau data) and snapshot history
+      parameters: [{ name: limit, in: query, schema: { type: integer } }]
+      responses: { '200': { description: OK } }
+  /v1/credit/clients/{id}/funding-matches:
+    parameters: [{ $ref: '#/components/parameters/ClientId' }]
+    get:
+      tags: [Credit]
+      summary: Funding Match — eligibility per product from the policy engine, plus readiness score
+      parameters:
+        - { name: categories, in: query, description: Comma-separated funding categories, schema: { type: string } }
+        - { name: noPersonalGuarantee, in: query, schema: { type: boolean } }
+      responses: { '200': { description: OK } }
+  /v1/credit/clients/{id}/strategy:
+    parameters: [{ $ref: '#/components/parameters/ClientId' }]
+    get:
+      tags: [Credit]
+      summary: Funding strategy output (prioritised steps and target products)
+      responses: { '200': { description: OK } }
+  /v1/credit/clients/{id}/timeline:
+    parameters: [{ $ref: '#/components/parameters/ClientId' }]
+    get:
+      tags: [Credit]
+      summary: Client event timeline
+      parameters: [{ name: limit, in: query, schema: { type: integer } }]
+      responses: { '200': { description: OK } }
+  /v1/credit/clients/{id}/journey/run:
+    parameters: [{ $ref: '#/components/parameters/ClientId' }]
+    post:
+      tags: [Credit, Orchestration]
+      summary: Start the `credit-journey` pipeline for this client
+      responses: { '202': { description: Pipeline started } }
+  /v1/credit/clients/{id}/strategy-sessions:
+    parameters: [{ $ref: '#/components/parameters/ClientId' }]
+    get:
+      tags: [Credit]
+      summary: List funding strategy sessions
+      responses: { '200': { description: OK } }
+    post:
+      tags: [Credit]
+      summary: Schedule a strategy session (data model only); emits `credit.session.scheduled`
+      requestBody:
+        content: { application/json: { schema: { type: object, required: [scheduledFor], properties: { scheduledFor: { type: string, format: date-time }, timezone: { type: string }, durationMinutes: { type: integer }, type: { type: string, enum: [funding-strategy, credit-review, document-review] }, attendees: { type: array, items: { type: string } }, agenda: { type: array, items: { type: string } } } } } }
+      responses: { '201': { description: Created } }
+  /v1/credit/clients/{id}/strategy-sessions/{sid}:
+    parameters: [{ $ref: '#/components/parameters/ClientId' }, { name: sid, in: path, required: true, schema: { type: string } }]
+    get:
+      tags: [Credit]
+      summary: Session detail
+      responses: { '200': { description: OK } }
+    put:
+      tags: [Credit]
+      summary: Update a session — completing it freezes the current strategy as the session summary
+      requestBody:
+        content: { application/json: { schema: { type: object, properties: { status: { type: string, enum: [scheduled, completed, cancelled, no-show] }, scheduledFor: { type: string, format: date-time }, notes: { type: string } } } } }
+      responses: { '200': { description: Updated } }
+
 webhooks:
   modelRunCompleted:
     post:
@@ -396,6 +565,8 @@ components:
     Invalid:
       description: Assumptions failed validation
       content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } }
+  parameters:
+    ClientId: { name: id, in: path, required: true, schema: { type: string } }
   schemas:
     Error:
       type: object
@@ -465,4 +636,43 @@ components:
         results: { type: array, items: { type: object } }
     WebhookEvent:
       type: string
-      enum: ['*', model.run.completed, policy.violated, scenario.saved, scenario.deleted, pipeline.completed, pipeline.failed, a2a.task.completed, commerce.settled]
+      enum: ['*', model.run.completed, policy.violated, scenario.saved, scenario.deleted, pipeline.completed, pipeline.failed, a2a.task.completed, commerce.settled, credit.client.created, credit.document.received, credit.document.reviewed, credit.stage.changed, credit.funding.matched, credit.session.scheduled]
+    JourneyStage:
+      type: string
+      enum: [intake, foundation, tier-1-vendor, tier-2-store, tier-3-fleet-fuel, tier-4-revolving, funding-ready]
+    CreditClientInput:
+      type: object
+      description: Structured intake. Either structured fields or `intakeText` (free text for AI-assisted extraction).
+      properties:
+        intakeText: { type: string }
+        legalName: { type: string }
+        ein: { type: string, example: '12-3456789' }
+        entityType: { type: string, enum: [llc, s-corp, c-corp, partnership, nonprofit, sole-proprietorship] }
+        state: { type: string, example: DE }
+        formationDate: { type: string, format: date }
+        address: { type: object }
+        addressType: { type: string, description: e.g. commercial, virtual-office, residential }
+        phone: { type: string }
+        phoneListed: { type: boolean }
+        email: { type: string }
+        website: { type: string }
+        businessBankAccount: { type: boolean }
+        dunsNumber: { type: string }
+        naics: { type: string }
+        licenses: { type: array, items: { type: string } }
+        licensesNotRequired: { type: boolean }
+        goodStanding: { type: boolean }
+        annualRevenue: { type: number }
+        monthlyRevenue: { type: number }
+        owners: { type: array, items: { type: object } }
+    Tradeline:
+      type: object
+      properties:
+        vendor: { type: string }
+        category: { type: string, enum: [vendor, store, fleet, fuel, revolving, card, auto, equipment, loan, line-of-credit] }
+        reportsTo: { type: array, items: { type: string } }
+        creditLimit: { type: number }
+        balance: { type: number }
+        status: { type: string }
+        openedAt: { type: string, format: date }
+        payments: { type: array, items: { type: object, properties: { amount: { type: number }, daysLate: { type: integer } } } }

@@ -9,6 +9,8 @@ import { redact } from '../secrets/index.js';
 export const EVENTS = [
   'model.run.completed', 'policy.violated', 'scenario.saved', 'scenario.deleted',
   'pipeline.completed', 'pipeline.failed', 'a2a.task.completed', 'commerce.settled',
+  'credit.client.created', 'credit.document.received', 'credit.document.reviewed', 'credit.stage.changed',
+  'credit.funding.matched', 'credit.session.scheduled',
 ];
 
 const PRIVATE_HOST = /^(localhost|.*\.local|.*\.internal)$/i;

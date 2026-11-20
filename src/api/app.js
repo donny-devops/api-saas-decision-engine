@@ -18,6 +18,11 @@ import { Commerce } from '../agents/commerce.js';
 import { agentCard, handleA2A } from '../agents/a2a.js';
 import { loadPipelines, startPipeline, validatePipeline } from '../orchestrator/pipelines.js';
 import { rulesFor } from '../orchestrator/tasks.js';
+import { CreditService } from '../credit/service.js';
+import {
+  FOUNDATION_CHECKLIST, CREDIT_BUILDER_TIERS, FUNDING_PRODUCTS, FUNDING_CATEGORIES, DOCUMENT_TYPES, DOCUMENT_STATUSES,
+  TRADELINE_CATEGORIES, BUREAUS, JOURNEY_STAGES, SESSION_TYPES, SESSION_STATUSES, ENTITY_TYPES, CREDIT_DISCLAIMER,
+} from '../credit/index.js';
 import { authenticate, hasScope, RateLimiter, createApiKey, listApiKeys, revokeApiKey } from './auth.js';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..', '..');
@@ -45,7 +50,8 @@ export function createApp({ db, fetchImpl, pipelines = loadPipelines(), limiter 
   const ctxRules = (name) => rulesFor({ db }, name);
   const { mesh, master } = createAgentSystem({ lookup, rulesFor: ctxRules });
   const commerce = new Commerce(db, mesh, { webhooks });
-  const pipelineCtx = { db, webhooks, mesh, master, lookup };
+  const credit = new CreditService(db, { webhooks, ...(fetchImpl ? { fetchImpl } : {}) });
+  const pipelineCtx = { db, webhooks, mesh, master, lookup, credit };
 
   const recordRun = (kind, scenario, input, summary, policies) =>
     Number(db.prepare('INSERT INTO runs (kind, scenario, input_json, summary_json, policy_json) VALUES (?, ?, ?, ?, ?)')
@@ -215,6 +221,76 @@ export function createApp({ db, fetchImpl, pipelines = loadPipelines(), limiter 
   route('POST', '/v1/commerce/accept', 'write', ({ body, principal }) => commerce.accept(body.quoteId, principal.account));
   route('POST', '/v1/commerce/top-up', 'admin', ({ body }) => ({ account: body.account, balance: commerce.topUp(body.account, body.credits, body.reason) }));
 
+  // ── Business credit platform (intake → documents → foundation → credit
+  //    builder → tracking → funding match → strategy). Tenant-scoped to the
+  //    API key's account; admin keys see every client. ─────────────────
+  const who = (principal) => [principal.account, { isAdmin: hasScope(principal, 'admin') }];
+  route('GET', '/v1/credit/catalog', 'read', () => ({
+    journeyStages: JOURNEY_STAGES,
+    entityTypes: ENTITY_TYPES,
+    foundationChecklist: FOUNDATION_CHECKLIST.map(({ check, ...c }) => c),
+    builderTiers: CREDIT_BUILDER_TIERS,
+    fundingCategories: FUNDING_CATEGORIES,
+    fundingProducts: FUNDING_PRODUCTS.map(({ amount, ...p }) => p),
+    documentTypes: Object.fromEntries(Object.entries(DOCUMENT_TYPES).map(([k, v]) => [k, v.title])),
+    documentStatuses: DOCUMENT_STATUSES,
+    tradelineCategories: TRADELINE_CATEGORIES,
+    bureaus: BUREAUS,
+    sessionTypes: SESSION_TYPES,
+    sessionStatuses: SESSION_STATUSES,
+    disclaimer: CREDIT_DISCLAIMER,
+  }));
+  route('POST', '/v1/credit/intake/extract', 'read', async ({ body }) => {
+    const { values, ...out } = await credit.extractIntake(body.text);
+    return out;
+  });
+  route('GET', '/v1/credit/clients', 'read', ({ principal, query }) => {
+    const [account, opts] = who(principal);
+    return { clients: credit.listClients(account, { ...opts, stage: query.get('stage'), limit: query.get('limit') }) };
+  });
+  route('POST', '/v1/credit/clients', 'write', async ({ principal, body }) => ({ status: 201, body: await credit.createClient(principal.account, body) }));
+  route('GET', '/v1/credit/clients/:id', 'read', ({ principal, params }) => credit.getClient(principal.account, params.id, who(principal)[1]));
+  route('PUT', '/v1/credit/clients/:id', 'write', ({ principal, params, body }) => credit.updateClient(principal.account, params.id, body, who(principal)[1]));
+
+  route('GET', '/v1/credit/clients/:id/documents/checklist', 'read', ({ principal, params }) => credit.preview(principal.account, params.id, who(principal)[1]).documents);
+  route('GET', '/v1/credit/clients/:id/documents', 'read', ({ principal, params }) => ({ documents: credit.listDocuments(principal.account, params.id, who(principal)[1]) }));
+  route('POST', '/v1/credit/clients/:id/documents', 'write', async ({ principal, params, body }) => ({ status: 201, body: await credit.addDocument(principal.account, params.id, body, who(principal)[1]) }));
+  route('GET', '/v1/credit/clients/:id/documents/:docId', 'read', ({ principal, params }) => credit.getDocument(principal.account, params.id, params.docId, who(principal)[1]));
+  route('PUT', '/v1/credit/clients/:id/documents/:docId', 'write', ({ principal, params, body }) => credit.reviewDocument(principal.account, params.id, params.docId, body, who(principal)[1]));
+
+  route('GET', '/v1/credit/clients/:id/tradelines', 'read', ({ principal, params }) => ({ tradelines: credit.listTradelines(principal.account, params.id, who(principal)[1]) }));
+  route('POST', '/v1/credit/clients/:id/tradelines', 'write', ({ principal, params, body }) => ({ status: 201, body: credit.addTradeline(principal.account, params.id, body, who(principal)[1]) }));
+  route('PUT', '/v1/credit/clients/:id/tradelines/:tid', 'write', ({ principal, params, body }) => credit.updateTradeline(principal.account, params.id, params.tid, body, who(principal)[1]));
+
+  route('POST', '/v1/credit/clients/:id/evaluate', 'write', ({ principal, params }) => credit.evaluate(principal.account, params.id, { ...who(principal)[1], trigger: 'api' }));
+  route('GET', '/v1/credit/clients/:id/foundation', 'read', ({ principal, params }) => credit.preview(principal.account, params.id, who(principal)[1]).foundation);
+  route('GET', '/v1/credit/clients/:id/credit-builder', 'read', ({ principal, params }) => credit.preview(principal.account, params.id, who(principal)[1]).builder);
+  route('GET', '/v1/credit/clients/:id/credit-profile', 'read', ({ principal, params, query }) => {
+    const [account, opts] = who(principal);
+    return { current: credit.preview(account, params.id, opts).credit, history: credit.creditHistory(account, params.id, { ...opts, limit: query.get('limit') }) };
+  });
+  route('GET', '/v1/credit/clients/:id/funding-matches', 'read', ({ principal, params, query }) => {
+    const funding = credit.preview(principal.account, params.id, who(principal)[1]).funding;
+    const cats = (query.get('categories') ?? '').split(',').filter(Boolean);
+    const noPg = query.get('noPersonalGuarantee') === 'true';
+    const matches = funding.matches.filter((m) => (!cats.length || cats.includes(m.category)) && (!noPg || m.personalGuarantee === false));
+    return { ...funding, matches };
+  });
+  route('GET', '/v1/credit/clients/:id/strategy', 'read', ({ principal, params }) => credit.preview(principal.account, params.id, who(principal)[1]).strategy);
+  route('GET', '/v1/credit/clients/:id/timeline', 'read', ({ principal, params, query }) => ({ events: credit.timeline(principal.account, params.id, { ...who(principal)[1], limit: query.get('limit') }) }));
+  route('POST', '/v1/credit/clients/:id/journey/run', 'write', ({ principal, params }) => {
+    credit.getClient(principal.account, params.id, who(principal)[1]);
+    const def = pipelines['credit-journey'];
+    if (!def) throw new HttpError(404, 'credit-journey pipeline not installed');
+    const id = startPipeline(def, { clientId: params.id }, pipelineCtx, { trigger: 'api:credit' });
+    return { status: 202, body: { id, pipeline: def.name, status: 'running', links: { self: `/v1/pipeline-runs/${id}` } } };
+  });
+
+  route('GET', '/v1/credit/clients/:id/strategy-sessions', 'read', ({ principal, params }) => ({ sessions: credit.listSessions(principal.account, params.id, who(principal)[1]) }));
+  route('POST', '/v1/credit/clients/:id/strategy-sessions', 'write', async ({ principal, params, body }) => ({ status: 201, body: await credit.scheduleSession(principal.account, params.id, body, who(principal)[1]) }));
+  route('GET', '/v1/credit/clients/:id/strategy-sessions/:sid', 'read', ({ principal, params }) => credit.getSession(principal.account, params.id, params.sid, who(principal)[1]));
+  route('PUT', '/v1/credit/clients/:id/strategy-sessions/:sid', 'write', ({ principal, params, body }) => credit.updateSession(principal.account, params.id, params.sid, body, who(principal)[1]));
+
   // ── Admin: API keys & webhooks ────────────────────────────────────
   route('GET', '/v1/api-keys', 'admin', () => ({ keys: listApiKeys(db) }));
   route('POST', '/v1/api-keys', 'admin', ({ body }) => ({ status: 201, body: createApiKey(db, body) }));
@@ -328,7 +404,7 @@ export function createApp({ db, fetchImpl, pipelines = loadPipelines(), limiter 
     }
   }
 
-  return { handle, mesh, master, webhooks, commerce, pipelines, pipelineCtx };
+  return { handle, mesh, master, webhooks, commerce, credit, pipelines, pipelineCtx };
 }
 
 function file(path, type) {

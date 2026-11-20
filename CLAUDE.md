@@ -12,7 +12,8 @@ Driver-based financial model + decision engine for API SaaS. Node ≥ 22.5, **ze
 ## Layout
 - `src/engine` — pure model (no Node/DOM imports; also served to the browser dashboard)
 - `src/orchestrator` — async DAG engine, pipelines (`pipelines/*.json`), cron
-- `src/agents` — mesh, specialists, master agent, A2A, commerce
+- `src/agents` — mesh, specialists, credit agents, master agent, A2A, commerce
+- `src/credit` — business-credit platform: intake, documents, foundation, tracking, builder, funding match, strategy (pure) + `service.js` (DB)
 - `src/api` — HTTP API + auth · `src/mcp` · `src/cli` · `src/bots`
 - `src/db` (node:sqlite + migrations) · `src/secrets` · `src/webhooks` · `src/mail`
 
