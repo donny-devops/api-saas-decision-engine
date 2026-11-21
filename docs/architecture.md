@@ -41,6 +41,11 @@
 
 ## Data model
 
+The pricing cohort pack is a stateless calculation: its request and result are not written
+to SQLite or sent to webhooks. It uses the existing API-key read scope. Existing global
+scenarios, runs, keys and webhooks are not organization-scoped; this deployment must not
+be treated as a tenant-isolated decision lifecycle.
+
 | Table | Purpose |
 |---|---|
 | `api_keys` | SHA-256 key hashes, scope, revocation |

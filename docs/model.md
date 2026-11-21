@@ -64,6 +64,20 @@ an `id` (tiers) merge by id; other arrays (funding rounds) replace. A scenario m
 
 ## Analysis
 
+- **Pricing cohort pack** (`POST /v1/decision-packs/pricing`): a stateless, single-month
+  calculation for a proposed price increase. All inputs are required: currency, customer
+  count, current and proposed monthly price, monthly variable cost per retained customer,
+  expected incremental churn, stress incremental churn, and a maximum incremental churn
+  guardrail. Rates are fractions from 0 to 1; monetary results use the supplied currency.
+  Baseline contribution is `customers × (currentPrice − costPerCustomer)`; for each
+  churn scenario, retained customers are `customers × (1 − churn)`, revenue is retained
+  customers × proposed price, and contribution is revenue minus retained customer costs.
+  Contribution break-even churn is `1 − (currentPrice − costPerCustomer) /
+  (proposedPrice − costPerCustomer)`. The result recommends a cohort test only if both
+  churn assumptions meet the supplied guardrail and both increase contribution; otherwise
+  it recommends holding. Gross margin is null when no customers remain.
+  Churn is supplied, not predicted; the model excludes new customers, fixed costs,
+  taxes, overage and transition costs. It is not a forecast or a confidence estimate.
 - **Sensitivity**: each key driver is shocked by ×(1 ± δ); drivers are ranked by the swing in the target metric.
 - **Goal seek**: bisection on one driver; wildcard paths (`tiers.*.price`) solve a common multiplier.
 - **Monte Carlo**: each driver in `KEY_DRIVERS` with σ > 0 is multiplied by `max(0.05, 1 + σ·N(0,1))`,

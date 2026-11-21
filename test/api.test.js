@@ -94,6 +94,18 @@ test('analysis endpoints and CSV export', async () => {
   assert.match(csv.data, /^period,/);
 });
 
+test('pricing pack requires authentication and validates all inputs', async () => {
+  const body = { currency: 'USD', customers: 100, currentPrice: 100, proposedPrice: 120, costPerCustomer: 20, expectedChurn: 0.05, stressChurn: 0.1, maxChurn: 0.12 };
+  assert.equal((await call('POST', '/v1/decision-packs/pricing', { body })).status, 401);
+  const result = await call('POST', '/v1/decision-packs/pricing', { key: keys.read, body });
+  assert.equal(result.status, 200);
+  assert.equal(result.data.expected.contributionChange, 1500);
+  assert.equal(result.data.recommendation, 'test');
+  const invalid = await call('POST', '/v1/decision-packs/pricing', { key: keys.read, body: { ...body, expectedChurn: 2 } });
+  assert.equal(invalid.status, 422);
+  assert.ok(invalid.data.error.details.includes('expectedChurn must be between 0 and 1'));
+});
+
 test('webhooks: admin registers; model runs deliver signed events', async () => {
   const hook = await call('POST', '/v1/webhooks', { key: keys.admin, body: { url: 'https://hooks.example.com/sde', events: ['model.run.completed'] } });
   assert.equal(hook.status, 201);
