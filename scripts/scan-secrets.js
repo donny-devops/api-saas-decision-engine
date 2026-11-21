@@ -7,8 +7,31 @@
 //   node scripts/scan-secrets.js --staged   # staged changes only (pre-commit)
 //
 // Allow a known false positive by adding `secret-scan:allow` on the same line.
-import { execFileSync } from 'node:child_process';
-import { readFileSync, statSync } from 'node:fs';
+import { openSync, fstatSync, readFileSync, closeSync } from 'fs';
+
+try {
+  const fd = openSync(f, 'r');
+
+  try {
+    const stat = fstatSync(fd);
+
+    if (stat.size > 2_000_000) {
+      continue;
+    }
+
+    const text = readFileSync(fd, 'utf8');
+
+    text.split('\n').forEach((line, i) => {
+      if (line.includes('secret-scan:allow')) return;
+      // scan logic...
+    });
+  } finally {
+    closeSync(fd);
+  }
+} catch {
+  continue;
+}
+
 
 const RULES = [
   { id: 'aws-access-key', re: /\b(AKIA|ASIA)[0-9A-Z]{16}\b/ },
