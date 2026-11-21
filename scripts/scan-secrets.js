@@ -3,35 +3,14 @@
 // gitleaks. Scans tracked files (or staged files with --staged) for credential
 // patterns and high-entropy assignments. Exit 1 on findings.
 //
-//   node scripts/scan-secrets.js            # all tracked files
-//   node scripts/scan-secrets.js --staged   # staged changes only (pre-commit)
+//   node tooling/security/scan-secrets.mjs            # all tracked files
+//   node tooling/security/scan-secrets.mjs --staged   # staged changes only (pre-commit)
 //
 // Allow a known false positive by adding `secret-scan:allow` on the same line.
-import { openSync, fstatSync, readFileSync, closeSync } from 'fs';
 
-try {
-  const fd = openSync(f, 'r');
-
-  try {
-    const stat = fstatSync(fd);
-
-    if (stat.size > 2_000_000) {
-      continue;
-    }
-
-    const text = readFileSync(fd, 'utf8');
-
-    text.split('\n').forEach((line, i) => {
-      if (line.includes('secret-scan:allow')) return;
-      // scan logic...
-    });
-  } finally {
-    closeSync(fd);
-  }
-} catch {
-  continue;
-}
-
+import { execFileSync } from 'node:child_process';
+import { readFileSync, statSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
 
 const RULES = [
   { id: 'aws-access-key', re: /\b(AKIA|ASIA)[0-9A-Z]{16}\b/ },
@@ -45,45 +24,83 @@ const RULES = [
   { id: 'webhook-secret', re: /\bwhsec_[A-Za-z0-9_-]{24,}/ },
   { id: 'private-key', re: /-----BEGIN (RSA |EC |OPENSSH |DSA |PGP )?PRIVATE KEY-----/ },
   { id: 'resend-key', re: /\bre_[A-Za-z0-9]{8}_[A-Za-z0-9]{20,}/ },
-  { id: 'generic-assignment', re: /\b(api[_-]?key|secret|password|passwd|token)\b\s*[:=]\s*['"][A-Za-z0-9+/_\-=]{20,}['"]/i, entropy: true },
+  {
+    id: 'generic-assignment',
+    re: /\b(api[_-]?key|secret|password|passwd|token)\b\s*[:=]\s*['"][A-Za-z0-9+/_\-=]{20,}['"]/i,
+    entropy: true,
+  },
 ];
-const SKIP = [/^package-lock\.json$/, /\.(png|jpe?g|gif|ico|pdf|woff2?|db)$/i, /^scripts\/scan-secrets\.js$/, /^test\//];
+
+const THIS_FILE = fileURLToPath(import.meta.url).replace(/\\/g, '/');
+const SKIP = [
+  /^package-lock\.json$/,
+  /^pnpm-lock\.yaml$/,
+  /\.(png|jpe?g|gif|ico|pdf|woff2?|db)$/i,
+  new RegExp(THIS_FILE.split('/').slice(-2).join('/')), // Ignore this scanner script
+  /^test\//,
+];
 
 function entropy(s) {
+  if (!s || s.length === 0) return 0;
   const f = {};
   for (const c of s) f[c] = (f[c] ?? 0) + 1;
   return Object.values(f).reduce((h, n) => h - (n / s.length) * Math.log2(n / s.length), 0);
 }
 
 const staged = process.argv.includes('--staged');
-const files = execFileSync('git', staged ? ['diff', '--cached', '--name-only', '--diff-filter=ACM'] : ['ls-files'], { encoding: 'utf8' })
-  .split('\n').filter(Boolean).filter((f) => !SKIP.some((re) => re.test(f)));
+const gitArgs = staged ? ['diff', '--cached', '--name-only', '--diff-filter=ACM'] : ['ls-files'];
+
+const files = execFileSync('git', gitArgs, { encoding: 'utf8' })
+  .split(/\r?\n/)
+  .map((f) => f.trim().replace(/\\/g, '/'))
+  .filter(Boolean)
+  .filter((f) => !SKIP.some((re) => re.test(f)));
 
 const findings = [];
+
 for (const f of files) {
   let text;
   try {
     if (statSync(f).size > 2_000_000) continue;
     text = readFileSync(f, 'utf8');
-  } catch { continue; }
-  text.split('\n').forEach((line, i) => {
+  } catch {
+    continue;
+  }
+
+  // Quick binary file skip (contains null bytes)
+  if (text.includes('\0')) continue;
+
+  text.split(/\r?\n/).forEach((line, i) => {
     if (line.includes('secret-scan:allow')) return;
+
     for (const rule of RULES) {
       const m = line.match(rule.re);
       if (!m) continue;
+
       if (rule.entropy) {
-        const value = m[0].split(/[:=]/).pop().replace(/['"\s]/g, '');
+        const value = m[0].split(/[:=]/).pop()?.replace(/['"\s]/g, '') ?? '';
         if (entropy(value) < 3.5) continue;
       }
-      findings.push({ file: f, line: i + 1, rule: rule.id, match: `${m[0].slice(0, 12)}…` });
+
+      findings.push({
+        file: f,
+        line: i + 1,
+        rule: rule.id,
+        match: `${m[0].slice(0, 12)}…`,
+      });
     }
   });
 }
 
 if (findings.length) {
   console.error(`✖ ${findings.length} potential secret(s):`);
-  for (const x of findings) console.error(`  ${x.file}:${x.line}  [${x.rule}]  ${x.match}`);
-  console.error('\nMove the value to the secrets manager (see docs/security.md). If it is a false positive, append `secret-scan:allow`.');
+  for (const x of findings) {
+    console.error(`  ${x.file}:${x.line}  [${x.rule}]  ${x.match}`);
+  }
+  console.error(
+    '\nMove the value to the secrets manager (see docs/security.md). If it is a false positive, append `secret-scan:allow`.'
+  );
   process.exit(1);
 }
+
 console.log(`✔ secret scan clean (${files.length} files)`);
