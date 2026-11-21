@@ -3,5 +3,5 @@
     company_size: startup
     api_complexity: low
   expected:
-    recommendation: documented_expected_result
-    rationale: documented_business_reason
+    recommendation: "documented_expected_result"
+    rationale: "documented_business_reason"
