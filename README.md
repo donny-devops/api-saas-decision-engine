@@ -55,13 +55,36 @@ node src/cli/index.js forensics base
 | Surface | Where |
 |---|---|
 | Dashboard | `GET /` runs the engine in the browser, with live drivers, charts, guardrails and a copyable scenario patch |
-| HTTP API | [docs/openapi.yaml](docs/openapi.yaml) (OpenAPI 3.1): model, scenarios, rulesets, runs, pipelines, agents, commerce, webhooks |
+| HTTP API | [docs/openapi.yaml](docs/openapi.yaml) (OpenAPI 3.1): model, scenarios, rulesets, runs, pipelines, agents, commerce, business credit, webhooks |
 | MCP server | `node src/mcp/server.js`, registered in [.mcp.json](.mcp.json); 9 tools and 5 resources |
 | A2A | `/.well-known/agent.json` and `POST /a2a` (`message/send`, `tasks/get`) |
 | Webhooks | Outbound HMAC-signed events; inbound GitHub push trigger |
 | Mailhooks | Email `run bull`, `compare base, bear`, `ask …` or `pipeline board-pack` to the inbound endpoint |
 | GitHub Actions | CI, secret scanning, CodeQL, nightly forecast digest, release; the `run-forecast` composite action fails a build on a blocking guardrail |
 | Claude Code | subagents in `.claude/agents/`, the `saas-financial-model` skill, `CLAUDE.md` |
+
+## Business credit platform
+
+EIN-based business-credit building on top of the decision engine and agent mesh. Every eligibility
+decision runs through the existing policy engine (`evaluatePolicies`), so a ruleset saved as
+`credit-<productId>` or `credit-<tierId>` overrides that criterion set live.
+
+| Feature | What it does | API |
+|---|---|---|
+| AI-powered client intake | Extracts business/EIN details from free text (rules + optional LLM), validates EIN prefix, entity, state, contact data | `POST /v1/credit/intake/extract`, `POST /v1/credit/clients` (`intakeText` supported) |
+| Intelligent document management | Upload (base64, SHA-256), auto-classification, review status, expiry, per-client required-document checklist | `/v1/credit/clients/{id}/documents[/checklist\|/{docId}]` |
+| Automated workflows | Journey stage routing, `credit.*` webhooks, `credit-journey` + nightly `credit-portfolio-review` pipelines | `POST /v1/credit/clients/{id}/journey/run`, `/v1/pipelines/...` |
+| Business credit tracking | Tradelines tied to the EIN → estimated PAYDEX / Intelliscore / SBSS, utilization, history snapshots and deltas | `/v1/credit/clients/{id}/tradelines`, `/credit-profile`, `/evaluate` |
+| Fundable Foundation Builder | 12-point credibility checklist (entity, EIN, address, 411 phone, website, email, bank, licenses, D-U-N-S, age, revenue) → 0-100 | `/v1/credit/clients/{id}/foundation` |
+| Business Credit Builder | Tiered path: vendor net-30 → store → fleet/fuel → revolving, with unlock criteria and progress | `/v1/credit/clients/{id}/credit-builder` |
+| Funding Match engine | Real-time eligibility for vendor/store/fleet-fuel lines, no-PG cards, lines of credit, auto/equipment, cash, SBA and bank loans | `/v1/credit/clients/{id}/funding-matches` |
+| Funding strategy sessions | Schedules strategy sessions and stores the phased 0-30/31-90/91-180-day strategy summary | `/v1/credit/clients/{id}/strategy[-sessions]` |
+
+Agents `credit-intake`, `credit-analyst` and `funding-matcher` join the mesh, so the same skills are
+available over A2A and billable through Agentic Commerce. EINs are AES-256-GCM encrypted at rest and only
+the last four digits are returned. Scores are estimates from the tradelines on file, not bureau pulls.
+Intentionally out of scope: a pricing/negotiation engine, live coaching and 24/7 funding-suite access.
+See [docs/business-credit.md](docs/business-credit.md).
 
 ## Scenarios nest
 
@@ -76,14 +99,15 @@ Save one with `PUT /v1/scenarios/<name>`. Other scenarios can then `extends` it.
 ```
 src/engine        pure model (also served to the browser)
 src/orchestrator  async DAG engine, pipeline compiler, cron
-src/agents        mesh, specialists, master agent, A2A, commerce
+src/agents        mesh, specialists, credit agents, master agent, A2A, commerce
+src/credit        business-credit platform (intake → funding match) + persistence service
 src/api           HTTP API, API-key auth, rate limiting
 src/mcp  src/cli  src/bots
 src/db            node:sqlite + migrations
 src/secrets       secrets manager (file / env / Vault) + AES-GCM
 src/webhooks      signed delivery, SSRF guard, verification
 src/mail          inbound commands, outbound mail
-pipelines/        nightly-forecast, board-pack, pricing-review
+pipelines/        nightly-forecast, board-pack, pricing-review, credit-journey, credit-portfolio-review
 dashboard/        interactive dashboard
 docs/             model, architecture, security, agents, quant-pqc-forensics, OpenAPI
 ```

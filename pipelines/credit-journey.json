@@ -1,0 +1,49 @@
+{
+  "name": "credit-journey",
+  "description": "Business-credit journey for one client: real-time evaluation and stage routing → document checklist + strategy → markdown report (pipeline.completed webhook fires automatically).",
+  "output": "report",
+  "tasks": [
+    {
+      "id": "evaluate",
+      "uses": "credit.evaluate",
+      "with": {
+        "clientId": "${{ input.clientId }}"
+      }
+    },
+    {
+      "id": "checklist",
+      "uses": "credit.documentChecklist",
+      "needs": [
+        "evaluate"
+      ],
+      "with": {
+        "clientId": "${{ input.clientId }}"
+      }
+    },
+    {
+      "id": "strategy",
+      "uses": "credit.strategy",
+      "needs": [
+        "evaluate"
+      ],
+      "with": {
+        "clientId": "${{ input.clientId }}"
+      }
+    },
+    {
+      "id": "report",
+      "uses": "credit.report",
+      "needs": [
+        "evaluate",
+        "checklist",
+        "strategy"
+      ],
+      "with": {
+        "clientId": "${{ input.clientId }}",
+        "evaluation": "${{ tasks.evaluate.output }}",
+        "strategy": "${{ tasks.strategy.output }}",
+        "checklist": "${{ tasks.checklist.output }}"
+      }
+    }
+  ]
+}

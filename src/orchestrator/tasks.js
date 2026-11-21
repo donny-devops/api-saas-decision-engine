@@ -6,6 +6,7 @@ import {
 } from '../engine/index.js';
 import { getSecret } from '../secrets/index.js';
 import { PqcAlgorithmicChain, PQC_ALGORITHMS } from '../secrets/pqc.js';
+import { CreditService, summarize } from '../credit/service.js';
 
 const fmt$ = (v) => (v == null ? 'n/a' : `$${(v / 1e6).toFixed(2)}M`);
 const pct = (v) => (v == null ? 'n/a' : `${(v * 100).toFixed(1)}%`);
@@ -16,6 +17,15 @@ export function rulesFor(ctx, rulesetName) {
   if (!row) throw Object.assign(new Error(`Unknown ruleset "${rulesetName}"`), { status: 404 });
   return JSON.parse(row.rules_json);
 }
+
+// Credit tasks reuse the app's CreditService when present (shared webhooks),
+// otherwise build one over ctx.db (CLI / scheduler).
+const creditSvc = (ctx) => {
+  if (ctx.credit) return ctx.credit;
+  if (!ctx.db) throw Object.assign(new Error('credit tasks need a database'), { status: 500 });
+  return (ctx.credit = new CreditService(ctx.db, { webhooks: ctx.webhooks }));
+};
+const ADMIN = { isAdmin: true };
 
 export const TASKS = {
   'model.run': async ({ scenario = {}, ruleset }, ctx) => {
@@ -39,6 +49,27 @@ export const TASKS = {
     const chain = new PqcAlgorithmicChain();
     const block = chain.append('pipeline.forensics.audit', { scenario: r.summary.scenario, maturity: forensics.digitalTransformation.maturityIndex });
     return { ...forensics, pqcChain: { algorithms: PQC_ALGORITHMS, blockHash: block.blockHash, verified: chain.verifyChain().valid } };
+  },
+
+  'credit.evaluate': async ({ clientId }, ctx) => summarize(await creditSvc(ctx).evaluate(null, clientId, { ...ADMIN, trigger: 'pipeline' })),
+  'credit.foundation': async ({ clientId }, ctx) => creditSvc(ctx).preview(null, clientId, ADMIN).foundation,
+  'credit.builderPlan': async ({ clientId }, ctx) => creditSvc(ctx).preview(null, clientId, ADMIN).builder,
+  'credit.fundingMatch': async ({ clientId }, ctx) => creditSvc(ctx).preview(null, clientId, ADMIN).funding,
+  'credit.documentChecklist': async ({ clientId }, ctx) => creditSvc(ctx).preview(null, clientId, ADMIN).documents,
+  'credit.strategy': async ({ clientId }, ctx) => creditSvc(ctx).preview(null, clientId, ADMIN).strategy,
+  'credit.reevaluateAll': async ({ limit }, ctx) => creditSvc(ctx).reevaluateAll({ limit }),
+  'credit.report': async ({ clientId, evaluation, strategy, checklist }, ctx) => {
+    const c = creditSvc(ctx).getClient(null, clientId, ADMIN);
+    const lines = [`# Business credit report: ${c.legalName} (EIN ${c.ein})`, '', `_Generated ${new Date().toISOString()}_`, ''];
+    if (evaluation) lines.push(`- Stage: **${evaluation.stage}** (${evaluation.stageReason})`, `- Readiness score: **${evaluation.readinessScore}** / 100 · Foundation: **${evaluation.foundationScore}** / 100`, `- Funding: ${evaluation.fundingSummary.eligible} eligible, ${evaluation.fundingSummary.conditional} conditional (est. capacity ${fmt$(evaluation.fundingSummary.estimatedCapacity)})`, '');
+    if (strategy) {
+      lines.push(`## Strategy`, '', strategy.headline, '');
+      for (const ph of strategy.phases) lines.push(`### ${ph.window}: ${ph.focus}`, ...(ph.actions.length ? ph.actions.map((a) => `- ${a}`) : ['- (none)']), '');
+      if (strategy.blockers.length) lines.push('## Blockers', ...strategy.blockers.map((b) => `- ${b}`), '');
+    }
+    if (checklist) lines.push(`## Documents (${Math.round(checklist.completion * 100)}% complete)`, ...checklist.items.map((i) => `- ${i.status === 'complete' ? '✅' : '⬜'} ${i.title}: ${i.verified}/${i.required} verified`), '');
+    const markdown = lines.join('\n');
+    return { markdown, text: markdown.replace(/[#*_|]/g, '') };
   },
 
   'agent.ask': async ({ question, scenario }, ctx) => ctx.master.ask(question, { scenario }),

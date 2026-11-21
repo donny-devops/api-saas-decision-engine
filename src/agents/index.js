@@ -1,11 +1,13 @@
 import { AgentMesh } from './mesh.js';
 import { createSpecialists } from './specialists.js';
 import { MasterAgent } from './master.js';
+import { createCreditAgents } from './credit.js';
 
 /** Build the default agent mesh: five specialists + the master agent as a mesh member. */
 export function createAgentSystem({ lookup, rulesFor, remotes = {} } = {}) {
   const mesh = new AgentMesh();
   for (const agent of createSpecialists({ lookup, rulesFor })) mesh.register(agent);
+  for (const agent of createCreditAgents()) mesh.register(agent);
   const master = new MasterAgent(mesh);
   mesh.register({
     name: 'master',
