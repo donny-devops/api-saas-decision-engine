@@ -31,6 +31,30 @@ export function loadRecentCorrections(limit = 5) {
   return corrections.slice(-limit);
 }
 
+export function exportPreferencePairs() {
+  // Turn human edits into DPO-style preference pairs.
+  if (!existsSync(FEEDBACK_PATH)) return [];
+  const lines = readFileSync(FEEDBACK_PATH, 'utf8').trim().split('\n').filter(Boolean);
+  const pairs = [];
+  for (const line of lines) {
+    try {
+      const rec = JSON.parse(line);
+      if (rec.human_action === 'edited' && rec.corrected_output) {
+        pairs.push({
+          prompt: rec.original_request || rec.request_id,
+          chosen: rec.corrected_output,
+          rejected: rec.original_output,
+          agent: rec.agent,
+          comment: rec.comment,
+        });
+      }
+    } catch {
+      /* skip */
+    }
+  }
+  return pairs;
+}
+
 export function correctionRate() {
   if (!existsSync(FEEDBACK_PATH)) {
     return { total: 0, edited: 0, approved: 0, rejected: 0, correction_rate: 0 };
