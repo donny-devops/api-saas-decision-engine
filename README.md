@@ -22,6 +22,8 @@ npm start         # API + dashboard → http://localhost:8787
 npm run seed      # local admin/read API keys → .env.local
 ```
 
+**Documentation**: [docs/README.md](docs/README.md) · [CONTRIBUTING.md](CONTRIBUTING.md) · [CHANGELOG.md](CHANGELOG.md) · [SECURITY.md](SECURITY.md)
+
 ## Why this exists
 
 Most financial models are either fragile spreadsheets or black-box tools that hide the drivers. This engine is neither. Every number is driven by explicit, inspectable assumptions. The same model powers the dashboard, the API, the CLI, the agents, and the pipelines — so what you see in the browser is exactly what the agents reason over and what the nightly forecast writes to the board pack.
