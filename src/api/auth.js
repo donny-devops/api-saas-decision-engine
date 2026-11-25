@@ -5,14 +5,17 @@ import { getSecret } from '../secrets/index.js';
 import { hashCredential, randomToken, safeEqual, verifyCredential } from '../secrets/crypto.js';
 
 export const SCOPES = ['read', 'write', 'admin'];
+const ENVIRONMENTS = ['live', 'test'];
 const rank = (s) => SCOPES.indexOf(s);
 
 export function createApiKey(db, { name, scope = 'read', env = 'live' }) {
   if (!SCOPES.includes(scope)) throw Object.assign(new Error(`scope must be one of ${SCOPES.join(', ')}`), { status: 400 });
-  if (!name) throw Object.assign(new Error('name is required'), { status: 400 });
+  if (!ENVIRONMENTS.includes(env)) throw Object.assign(new Error(`env must be one of ${ENVIRONMENTS.join(', ')}`), { status: 400 });
+  const cleanName = typeof name === 'string' ? name.trim() : '';
+  if (!cleanName || cleanName.length > 80) throw Object.assign(new Error('name must be 1-80 characters'), { status: 400 });
   const key = randomToken(`sde_${env}_`, 24);
-  const { lastInsertRowid } = db.prepare('INSERT INTO api_keys (name, prefix, key_hash, scopes) VALUES (?, ?, ?, ?)').run(name, key.slice(0, 13), hashCredential(key), scope);
-  return { id: Number(lastInsertRowid), name, scope, key }; // plaintext returned once
+  const { lastInsertRowid } = db.prepare('INSERT INTO api_keys (name, prefix, key_hash, scopes) VALUES (?, ?, ?, ?)').run(cleanName, key.slice(0, 13), hashCredential(key), scope);
+  return { id: Number(lastInsertRowid), name: cleanName, scope, key }; // plaintext returned once
 }
 
 export function listApiKeys(db) {
@@ -53,7 +56,10 @@ export class RateLimiter {
     const ok = b.tokens >= cost;
     if (ok) b.tokens -= cost;
     this.buckets.set(key, b);
-    if (this.buckets.size > 10_000) this.buckets.clear();
+    if (this.buckets.size > 10_000) {
+      const oldest = this.buckets.keys().next().value;
+      if (oldest !== undefined && oldest !== key) this.buckets.delete(oldest);
+    }
     return { ok, remaining: Math.floor(b.tokens), retryAfter: ok ? 0 : Math.ceil((cost - b.tokens) / this.refillPerSec) };
   }
 }
