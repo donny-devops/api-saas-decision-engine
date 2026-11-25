@@ -1,7 +1,7 @@
 {
   "name": "api-saas-decision-engine",
   "version": "0.1.0",
-  "description": "Driver-based financial model and decision engine for API-based SaaS: revenue, cost structure and scalability simulation with API, MCP server, agents, DAG pipelines and an interactive dashboard.",
+  "description": "Production-grade, zero-dependency driver-based financial model and decision engine for API-first SaaS. Simulates revenue, costs, scalability, cash, and runway month-by-month. Includes HTTP API, MCP server, CLI, interactive dashboard, async DAG pipelines, multi-agent mesh over A2A, policy guardrails, pricing analysis, business credit platform, and post-quantum cryptography hybrid chains.",
   "type": "module",
   "license": "MIT",
   "engines": { "node": ">=22.5" },
