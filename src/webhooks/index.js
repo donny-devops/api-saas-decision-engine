@@ -14,21 +14,32 @@ export const EVENTS = [
 ];
 
 const PRIVATE_HOST = /^(localhost|.*\.local|.*\.internal)$/i;
+const BLOCKED_HOSTS = new Set(['metadata.google.internal', 'metadata.google.com', 'instance-data']);
+
 function isPrivateIp(host) {
   if (!isIP(host)) return false;
   return /^(10\.|127\.|169\.254\.|192\.168\.|172\.(1[6-9]|2\d|3[01])\.|0\.)/.test(host) || host === '::1' || /^f[cd]/i.test(host);
 }
 
+function badRequest(message) {
+  return Object.assign(new Error(message), { status: 400 });
+}
+
 /** Basic SSRF guard for admin-registered URLs. Set ALLOW_PRIVATE_WEBHOOKS=true for local testing. */
 export function assertSafeUrl(raw) {
-  let u;
-  try { u = new URL(raw); } catch { throw Object.assign(new Error('Invalid URL'), { status: 400 }); }
-  if (!['https:', 'http:'].includes(u.protocol)) throw Object.assign(new Error('Webhook URL must be http(s)'), { status: 400 });
-  const host = u.hostname.replace(/^\[|\]$/g, '');
-  if (process.env.ALLOW_PRIVATE_WEBHOOKS !== 'true' && (PRIVATE_HOST.test(host) || isPrivateIp(host))) {
-    throw Object.assign(new Error('Webhook URL points at a private address'), { status: 400 });
+  if (typeof raw !== 'string' || !raw.trim() || raw.includes('\0') || raw.includes('\\')) {
+    throw badRequest('Invalid URL');
   }
-  if (process.env.NODE_ENV === 'production' && u.protocol !== 'https:') throw Object.assign(new Error('Webhook URL must be https in production'), { status: 400 });
+  let u;
+  try { u = new URL(raw.trim()); } catch { throw badRequest('Invalid URL'); }
+  if (u.username || u.password) throw badRequest('Webhook URL must not include credentials');
+  if (!['https:', 'http:'].includes(u.protocol)) throw badRequest('Webhook URL must be http(s)');
+  const host = u.hostname.replace(/^\[|\]$/g, '').toLowerCase();
+  if (BLOCKED_HOSTS.has(host)) throw badRequest('Webhook URL points at a metadata host');
+  if (process.env.ALLOW_PRIVATE_WEBHOOKS !== 'true' && (PRIVATE_HOST.test(host) || isPrivateIp(host))) {
+    throw badRequest('Webhook URL points at a private address');
+  }
+  if (process.env.NODE_ENV === 'production' && u.protocol !== 'https:') throw badRequest('Webhook URL must be https in production');
   return u.toString();
 }
 
@@ -56,8 +67,11 @@ export class WebhookService {
 
   async create({ url, events = ['*'] }) {
     const safe = assertSafeUrl(url);
+    if (!Array.isArray(events) || events.length === 0 || events.some((e) => typeof e !== 'string')) {
+      throw badRequest('events must be a non-empty array of strings');
+    }
     const bad = events.filter((e) => e !== '*' && !EVENTS.includes(e));
-    if (bad.length) throw Object.assign(new Error(`Unknown events: ${bad.join(', ')}`), { status: 400 });
+    if (bad.length) throw badRequest(`Unknown events: ${bad.join(', ')}`);
     const secret = randomToken('whsec_');
     const { lastInsertRowid } = this.db.prepare('INSERT INTO webhooks (url, events, secret_enc) VALUES (?, ?, ?)').run(safe, events.join(','), await encrypt(secret));
     // The signing secret is returned exactly once.
